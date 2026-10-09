@@ -1,0 +1,441 @@
+# Sonify 1026 Voice Configuration
+character:
+  name: "Sonify 1026"
+  gender: "female"
+  age_range: "young_adult"
+  base_pitch: -5
+  pitch_min: -45
+  pitch_max: 25
+  randomize_seed: true    # every call is a unique performance (set false + seed to reproduce)
+  speaking_rate: 1.0
+  default_emotion: "neutral"
+
+output:
+  sample_rate: 48000
+
+# Emotion presets — small rate/pause shifts, not cartoon pitch jumps
+emotions:
+  neutral:    {pitch: 0,  rate: "-2%",  volume: "+0%",   pause: 1.00, bright: 0.15, warm: 0.25, dark: null,  comp: 1.0, air: -48}
+  warm:       {pitch: 1,  rate: "-4%",  volume: "-1%",   pause: 1.06, bright: 0.15, warm: 0.5,  dark: null,  comp: 1.0, air: -47}
+  happy:      {pitch: 2,  rate: "+2%",  volume: "+2%",   pause: 0.96, bright: 0.35, warm: 0.1,  dark: null,  comp: 1.0,  air: -48}
+  calm:       {pitch: -1, rate: "-6%",  volume: "-2%",   pause: 1.12, bright: -0.2, warm: 0.4,  dark: null,  comp: 1.0, air: -47}
+  gentle:     {pitch: -1, rate: "-5%",  volume: "-4%",   pause: 1.10, bright: -0.15, warm: 0.45, dark: null,  comp: 1.0, air: -47}
+  sad:        {pitch: -3, rate: "-8%",  volume: "-5%",   pause: 1.22, bright: -0.6, warm: 0.6,  dark: 7800,  comp: 1.0,  air: -47}
+  excited:    {pitch: 3,  rate: "+5%",  volume: "+3%",   pause: 0.90, bright: 0.5,  warm: 0.0,  dark: null,  comp: 1.0, air: -49}
+  whisper:    {pitch: -2, rate: "-6%",  volume: "-12%",  pause: 1.18, bright: 0.2,  warm: 0.25, dark: null,  comp: 1.0,  air: -54}
+  angry:      {pitch: 1,  rate: "+2%",  volume: "+4%",   pause: 0.97, bright: 0.35, warm: 0.2,  dark: null,  comp: 1.0, air: -49}
+  fearful:    {pitch: 2,  rate: "+4%",  volume: "+1%",   pause: 0.94, bright: 0.2,  warm: -0.1, dark: null,  comp: 1.0,  air: -48}
+  thoughtful: {pitch: -1, rate: "-5%",  volume: "-2%",   pause: 1.14, bright: -0.1, warm: 0.4,  dark: null,  comp: 1.0, air: -47}
+  playful:    {pitch: 2,  rate: "+3%",  volume: "+2%",   pause: 0.94, bright: 0.4,  warm: 0.0,  dark: null,  comp: 1.0,  air: -48}
+  tired:      {pitch: -2, rate: "-8%",  volume: "-4%",   pause: 1.18, bright: -0.5, warm: 0.5,  dark: 8000,  comp: 1.0,  air: -46}
+  proud:      {pitch: 1,  rate: "-1%",  volume: "+2%",   pause: 1.04, bright: 0.25, warm: 0.35, dark: null,  comp: 1.0,  air: -48}
+  surprised:  {pitch: 4,  rate: "+4%",  volume: "+3%",   pause: 0.92, bright: 0.45, warm: -0.1, dark: null,  comp: 1.0, air: -48}
+  reassuring: {pitch: 0,  rate: "-3%",  volume: "-1%",   pause: 1.10, bright: 0.1,  warm: 0.55, dark: null,  comp: 1.0,  air: -47}
+  serious:    {pitch: -1, rate: "-2%",  volume: "+1%",   pause: 1.06, bright: 0.1,  warm: 0.25, dark: null,  comp: 1.0,  air: -48}
+
+# Voice definitions
+voices:
+  # Neerja (English IN)
+  # lo allows the negative base_pitch offset through the per-segment clip
+  neerja: {id: "en-IN-NeerjaNeural", pitch: 0,  lo: -45, hi: 25}
+  # Swara for Hindi / Devanagari. Native pitch, no extra Hz offset.
+  swara:  {id: "hi-IN-SwaraNeural",  pitch: 0,  lo: -45, hi: 25}
+  aria:   {id: "en-US-AriaNeural",   pitch: 0,  lo: -45, hi: 25}
+
+accents:
+  in: {voice: "neerja", rate: -2, label: "Indian English (Neerja)"}
+  us: {voice: "aria",   rate: 0,  label: "General American"}
+default_accent: "in"
+
+# Persona DSP settings
+persona:
+  highpass_hz: 95.0
+  warm_hz: 190.0
+  warm_gain: 0.85        # chest resonance — low-to-mid fullness
+  pres_hz: 3400.0
+  pres_gain: 1.3         # articulation / phoneme definition
+  target_rms_db: -20.5
+  peak_ceiling_db: -1.0
+  presence_hz: 7800.0
+  presence_gain: 1.6     # high-frequency air for crisp consonants
+  presence_q: 0.6
+
+# Punctuation handling
+punctuation:
+  sentence_pause_ms: 240
+  pause_jitter: 0.30          # organic micro-pause variation (±30%, 0 = metronomic)
+  cognitive_pause:            # occasional slow "thinking of the words" stalls
+    probability: 0.30
+    min_factor: 1.6
+    max_factor: 2.3
+  sentence:  {pause_ms: 240, pitch_drop: true}
+  question:  {pause_ms: 220, pitch_rise: true}
+  exclaim:   {pause_ms: 200, energy_boost: 1.08}   # light lift only — no theatrical projection
+  clause:    {pause_ms: 190}   # mid-sentence breathing pause
+  ellipsis:  {pause_ms: 320, pitch_drop: true}
+
+# Speak like a person: short thoughts, contractions, pauses between phrases
+humanize:
+  enabled: true
+  contractions: true
+  max_utterance_chars: 260    # sentences stay intact (phoneme clarity); long text still splits
+  soft_max_utterance_chars: 520   # only split at real sentence ends — never mid-thought
+  lead_ms: 40
+  tail_ms: 110
+  crossfade_ms: 28
+  max_pitch_step_hz: 3       # pitch glides between takes instead of jumping
+
+# Pitch guard — verifies the rendered voice really sounds like the intended
+# speaker, and re-renders with a nudge if a phrase drifts outside the register.
+pitch_guard:
+  enabled: true
+  min_f0_hz: 196.0         # below this the voice can read as male
+  max_f0_hz: 288.0         # above this it strains
+  max_attempts: 2          # re-render at most twice
+  max_adjust_hz: 12.0      # per-attempt pitch nudge
+  sample_seconds: 6.0
+
+# Prosody control
+prosody:
+  enable_dynamic_pitch: true
+  enable_dynamic_rate: true
+  enable_energy_control: true
+  sentence_level_variation: 0.08
+  word_level_variation: 0.02
+
+# Breath — soft organic inhalation before phrases (breathing rhythm)
+breath:
+  enabled: true
+  sentence_prob: 0.55
+  question_prob: 0.58
+  exclaim_prob: 0.60
+  ellipsis_prob: 0.50
+  clause_prob: 0.18
+  default_prob: 0.38
+  emotional_boost: 0.15
+  short_phrase_chars: 45      # breaths mostly before LONGER phrases...
+  short_phrase_prob_scale: 0.4 # ...short ones breathe far less often
+  duration_min: 0.12
+  duration_max: 0.20
+  level_normal: 0.065         # very soft — audible, but never veils the speech
+  level_emotional: 0.09
+
+# Emphasis settings (gentle — no sharp synthetic spikes)
+emphasis:
+  enabled: true
+  boost_db: 1.8
+  ramp_factor: 0.4
+
+# Vocal effort — gentle projection on content words (subglottic pressure)
+keyword_emphasis:
+  enabled: true
+  boost_db: 2.0
+  soften_db: -1.2        # hedging words are delivered more softly
+
+# Soft indrawn breath before an emphasised word
+keyword_breath:
+  enabled: true
+  probability: 0.14
+
+# Room tone / air settings (disabled per request)
+room_tone:
+  enabled: false
+  room_ratio: 0.7
+  breath_ratio: 0.3
+  modulation_1_hz: 0.3
+  modulation_1_amp: 0.15
+  modulation_2_hz: 0.7
+  modulation_2_amp: 0.08
+  modulation_3_hz: 1.3
+  modulation_3_amp: 0.05
+  hum_50hz: 0.02
+  hum_100hz: 0.01
+  lowpass_hz: 800.0
+  lowpass_q: 0.5
+
+air_breath:
+  lowpass_hz: 400.0
+  bandwidth: 200.0
+  intensity_offset: -4
+
+# Micro-prosody (subtle natural vocal amplitude variation — non-periodic feel)
+micro_prosody:
+  enabled: true
+  amplitude_shimmer_db: 0.25  # very light — keeps breath dynamics non-periodic
+  rate_hz: 6.0                # vocal fold modulation rate (~5-8 Hz is natural)
+
+# Vocal fry (creaky voice at phrase endings — strongest when pitch lowers)
+vocal_fry:
+  enabled: true
+  probability: 0.45           # only some phrase endings — realism, not a tic
+  intensity: 0.11             # depth of the creak (0 = none, 0.6 = strong)
+  duration_frac: 0.16         # applies to the last 16% of each segment
+  max_seconds: 0.40
+  pulse_hz: 34.0              # base creak rate; jittered organically per pulse
+
+# Cognitive hesitation fillers (uhm, hmm) spoken naturally inside pauses
+pause_filler:
+  enabled: false           # off: spoken hesitations read as a stray "ahm" at the end
+  probability: 0.28            # fraction of long pauses that get a hesitation
+  words: ["uhm", "umm", "hmm", "ahm", "hmm"]
+  min_pause_ms: 175           # only inside pauses at least this long
+  max_seconds: 0.6
+  gain_db: -10                # quieter than main speech
+  rate: "-6%"
+  volume: "-12%"
+  pitch_hz: -3
+  micro:                      # tiny stall sounds in shorter pauses
+    probability: 0.35
+    words: ["uh", "eh", "umm"]
+    min_pause_ms: 90
+    max_seconds: 0.45
+    gain_db: -13
+    rate: "+0%"
+    volume: "-15%"
+    pitch_hz: -4
+
+# Variable word elongation (stretching vowels slightly while thinking)
+word_elongation:
+  enabled: false           # OLA time-expansion blurs consonants — clarity first
+  probability: 0.10           # occasional — variable syllable duration, not smearing
+  min_factor: 1.10
+  max_factor: 1.26
+  min_chars: 3
+
+# Mouth clicks (subtle lip-parting before phrases)
+mouth_click:
+  enabled: true
+  probability: 0.18
+  duration_ms: 5.0
+  level_db: -45.0            # relative to segment RMS — a hint, not a pop
+
+# Coarticulation smoothing (crossfade between segments)
+coarticulation:
+  enabled: false
+  window_ms: 30.0
+
+# Word-level energy variation (variable syllable/word stress)
+word_life:
+  enabled: true
+  db: 1.4
+
+# Phrase-level amplitude contour (slight dynamic volume shifts)
+phrase_swell:
+  enabled: true
+  db: 1.6
+
+# Delivery registers
+registers:
+  normal: {rate: 0,  pitch: 0,  pause: 1.00, vol: 0,  bright: 0.0}
+  formal: {rate: -3, pitch: -1, pause: 1.12, vol: -1, bright: -0.3}
+  casual: {rate: 3,  pitch: 1,  pause: 1.00, vol: 0,  bright: 0.1}
+default_register: "casual"    # off-the-cuff voice-note delivery by default
+
+# Per-voice settings
+voice_settings:
+  neerja:
+    gain_db: 0.0
+    eq:
+      # Minimal de-mud only — body/chest must survive for warmth
+      - {type: "pk", freq: 300.0, gain: -0.4, q: 0.8}
+      # Mid presence for consonant definition
+      - {type: "pk", freq: 2800.0, gain: 1.6, q: 0.9}
+      # Crisp articulation band
+      - {type: "pk", freq: 4500.0, gain: 2.0, q: 0.8}
+      # High shelf air — sibilant clarity ("pristine high-resolution")
+      - {type: "pk", freq: 9500.0, gain: 2.8, q: 0.6}
+  swara:
+    gain_db: 0.0
+    eq:
+      # Minimal de-mud — body/chest must survive for warmth
+      - {type: "pk", freq: 280.0, gain: -0.4, q: 0.9}
+      # Mid presence for consonant definition
+      - {type: "pk", freq: 2800.0, gain: 1.6, q: 0.9}
+      # Crisp articulation band
+      - {type: "pk", freq: 4500.0, gain: 2.0, q: 0.8}
+      # High shelf air — sibilant clarity
+      - {type: "pk", freq: 9500.0, gain: 2.8, q: 0.6}
+  aria:
+    gain_db: 0.0
+    eq:
+      - {type: "pk", freq: 300.0, gain: -0.4, q: 0.8}
+      - {type: "pk", freq: 2800.0, gain: 1.6, q: 0.9}
+      - {type: "pk", freq: 4500.0, gain: 2.0, q: 0.8}
+      - {type: "pk", freq: 9500.0, gain: 2.8, q: 0.6}
+
+# Per-segment variation (conversation drift, not metronome)
+variation:
+  pitch_hz: 1.0
+  rate_pct: 2.0
+  volume_db: 0.6
+  burst:                      # fast bursts of words, then slow back down
+    probability: 0.30
+    min_pct: 4
+    max_pct: 9
+
+# Voice cloning reference
+voice_cloning:
+  reference_audio: "models/reference_voice.wav"
+  enabled: false
+
+# ─────────────────────────────────────────────────────────────────────────── #
+# Sentence-type prosody rules (replaces ALL hardcoded values in engine.py)
+# Tune freely — the engine reads these and applies them dynamically.
+# ─────────────────────────────────────────────────────────────────────────── #
+sentence_type_rules:
+  sentence:  {pitch:  0, rate:  0, volume:  0}
+  question:  {pitch:  3, rate: -1, volume:  0}   # Questions: slightly higher, slower
+  exclaim:   {pitch:  4, rate:  2, volume:  2}   # Exclamations: energetic
+  ellipsis:  {pitch: -1, rate: -2, volume: -1}   # Pauses: softer, trailing off
+  clause:    {pitch:  1, rate:  0, volume:  0}   # Mid-sentence clause: slight lift
+  aside:     {pitch: -2, rate: -1, volume: -2}   # Parenthetical: quiet, quick
+
+# ─────────────────────────────────────────────────────────────────────────── #
+# Dynamic text analysis
+# Words that boost or reduce emotional intensity in any sentence.
+# Add Hindi words too — the engine handles Unicode word detection.
+# ─────────────────────────────────────────────────────────────────────────── #
+dynamic_prosody:
+  enabled: true
+  intensity_words:
+    high:
+      - very
+      - extremely
+      - absolutely
+      - incredibly
+      - amazing
+      - wonderful
+      - never
+      - always
+      - completely
+      - perfect
+      - brilliant
+      - fantastic
+      - love
+      - hate
+      - bahut
+      - bilkul
+      - ekdum
+      - zaroor
+    medium:
+      - quite
+      - really
+      - so
+      - such
+      - much
+      - pretty
+      - fairly
+      - kaafi
+      - acha
+      - accha
+      - thoda
+    low:
+      - terrible
+      - awful
+      - horrible
+      - slightly
+      - perhaps
+      - maybe
+      - somewhat
+      - rather
+      - shayad
+      - lagbhag
+  intensity_pitch_scale: 0.8   # how much intensity boosts pitch delta
+  intensity_rate_scale:  0.7   # how much intensity boosts rate delta
+  intensity_volume_scale: 5.0  # vocal effort — strong content projects more energy
+
+  # Emotional valence — drives smiling inflection, softening and pause length
+  valence_words:
+    positive:
+      - wonderful
+      - beautiful
+      - amazing
+      - great
+      - happy
+      - glad
+      - delighted
+      - perfect
+      - love
+      - thanks
+      - thank
+      - excellent
+      - brilliant
+      - khush
+      - khushi
+      - accha
+      - badhiya
+    tender:
+      - care
+      - dear
+      - hug
+      - gentle
+      - warm
+      - hope
+      - safe
+      - sorry
+      - understand
+      - here
+      - together
+      - pyaar
+      - dil
+      - samajh
+      - apna
+    negative:
+      - bad
+      - terrible
+      - awful
+      - sad
+      - hurt
+      - afraid
+      - scared
+      - problem
+      - sorry
+      - lose
+      - failed
+      - wrong
+      - dukh
+      - dard
+      - bura
+  smile_pitch_st: 1.4       # semitones of lift on positive phrases
+  smile_volume_db: -1.2    # acoustic softening on warm phrases
+  smile_rate_pct: -1.5     # warm phrases ease slightly
+  smile_bright_db: 1.2     # sweetness scales with the mood of the sentence
+  soften_warm_db: 0.5      # warmth scales with tender passages
+  valence_pause_scale: 0.14 # emotional subtext lengthens/shortens the pause
+  arc_pitch_st: 0.9        # pitch builds as the script's emotion builds
+  arc_volume_db: 2.0       # energy builds across an emotionally rising passage
+
+  length_rate_adjust: true
+  short_sentence_chars: 25     # sentences shorter than this get snappier
+  long_sentence_chars:  75     # sentences longer than this get more deliberate
+  length_rate_delta: 2         # +/- rate adjustment for length
+
+# ─────────────────────────────────────────────────────────────────────────── #
+# Natural intonation arc — the voice naturally rises and falls within each
+# phrase according to the active emotion.  All params are per-emotion.
+#   rise: semitones of pitch rise from start to peak
+#   fall: semitones of pitch fall from peak to end
+#   peak: relative position of peak (0=start, 1=end)
+# ─────────────────────────────────────────────────────────────────────────── #
+pitch_contour:
+  enabled: false          # OLA pitch shifting smears consonants — smile comes from valence instead
+  hop_ms: 20.0                        # analysis frame hop (ms)
+  question_terminal_rise_st: 1.2     # extra semitone rise at end of questions
+  emotion_modulation:
+    neutral:    {rise: 0.7, fall: 1.0, peak: 0.38}
+    happy:      {rise: 1.2, fall: 0.7, peak: 0.30}  # early bright peak
+    sad:        {rise: 0.3, fall: 1.8, peak: 0.42}  # long slow fall
+    excited:    {rise: 1.8, fall: 0.4, peak: 0.22}  # fast early burst
+    calm:       {rise: 0.5, fall: 0.9, peak: 0.48}  # flat, centred
+    warm:       {rise: 0.8, fall: 0.9, peak: 0.38}
+    gentle:     {rise: 0.4, fall: 0.8, peak: 0.45}
+    fearful:    {rise: 1.4, fall: 0.5, peak: 0.20}  # nervous high start
+    thoughtful: {rise: 0.5, fall: 1.2, peak: 0.40}
+    playful:    {rise: 1.5, fall: 0.6, peak: 0.28}  # bouncy peak
+    tired:      {rise: 0.2, fall: 2.0, peak: 0.50}  # droop throughout
+    proud:      {rise: 1.0, fall: 0.8, peak: 0.33}
+    surprised:  {rise: 2.0, fall: 0.3, peak: 0.18}  # sudden upswing
+    reassuring: {rise: 0.6, fall: 0.8, peak: 0.42}
+    serious:    {rise: 0.5, fall: 1.3, peak: 0.40}
+    angry:      {rise: 1.3, fall: 0.6, peak: 0.25}
+    whisper:    {rise: 0.3, fall: 0.7, peak: 0.45}

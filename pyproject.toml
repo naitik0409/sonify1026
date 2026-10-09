@@ -1,0 +1,80 @@
+[build-system]
+requires = ["setuptools>=77.0.3", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sonify1026"
+version = "0.1.0"
+description = "Expressive Indian female TTS voice engine with adaptive emotion, prosody and EN/HI code-switching"
+readme = {file = "README.md", content-type = "text/markdown"}
+requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    {name = "Sonify 1026", email = "you@example.com"},
+]
+maintainers = [
+    {name = "Sonify 1026", email = "you@example.com"},
+]
+keywords = [
+    "tts",
+    "text-to-speech",
+    "voice",
+    "speech",
+    "synthesis",
+    "hindi",
+    "hinglish",
+    "indian-english",
+    "emotion",
+    "prosody",
+    "edge-tts",
+    "text2speech",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Natural Language :: English",
+    "Natural Language :: Hindi",
+]
+dependencies = [
+    "edge-tts>=6.1.12",
+    "numpy>=1.26.0",
+    "scipy>=1.11.0",
+    "soundfile>=0.12.1",
+    "PyYAML>=6.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "build>=1.0.0",
+    "twine>=4.0.0",
+    "sounddevice>=0.4.6",
+]
+
+[project.urls]
+Homepage = "https://github.com/YOUR-USERNAME/sonify1026"
+Source = "https://github.com/YOUR-USERNAME/sonify1026"
+Issues = "https://github.com/YOUR-USERNAME/sonify1026/issues"
+
+[project.scripts]
+sonify1026 = "snfy.__main__:main"
+snfy = "snfy.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["snfy*"]
+
+[tool.setuptools.package-data]
+snfy = ["*.yaml", "*.yml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
