@@ -3,7 +3,7 @@ character:
   name: "Sonify 1026"
   gender: "female"
   age_range: "young_adult"
-  base_pitch: -5
+  base_pitch: -2
   pitch_min: -45
   pitch_max: 25
   randomize_seed: true    # every call is a unique performance (set false + seed to reproduce)
@@ -37,15 +37,37 @@ emotions:
 voices:
   # Neerja (English IN)
   # lo allows the negative base_pitch offset through the per-segment clip
-  neerja: {id: "en-IN-NeerjaNeural", pitch: 0,  lo: -45, hi: 25}
+  # rate slows her naturally quick pace into the 130-150 WPM band
+  neerja: {id: "en-IN-NeerjaNeural", pitch: 0,  rate: -7, lo: -45, hi: 25}
   # Swara for Hindi / Devanagari. Native pitch, no extra Hz offset.
-  swara:  {id: "hi-IN-SwaraNeural",  pitch: 0,  lo: -45, hi: 25}
-  aria:   {id: "en-US-AriaNeural",   pitch: 0,  lo: -45, hi: 25}
+  swara:
+    id: "hi-IN-SwaraNeural"
+    pitch: 10          # lift the Hindi voice into a younger, sweeter register
+    rate: 8            # Hindi pace matched into the 150-165 WPM band
+    lo: -45
+    hi: 25
+  aria:   {id: "en-US-AriaNeural",   pitch: 0,  rate: 0, lo: -45, hi: 25}
 
 accents:
   in: {voice: "neerja", rate: -2, label: "Indian English (Neerja)"}
   us: {voice: "aria",   rate: 0,  label: "General American"}
 default_accent: "in"
+
+# Voice selection mode.
+#   single — one voice for every language, so the speaker identity and Indian
+#            accent never change mid-script (English, Hindi, Hinglish).
+#   dual   — legacy behaviour: English voices for Latin text, Swara for
+#            Devanagari.  Two speakers, so the voice flips on code-switching.
+# The primary voice must be one the backend can drive across scripts.  The
+# hi-IN voices (Swara/Madhur) are bilingual; the en-IN voices are English-only.
+voice_mode:
+  mode: single
+  primary: swara
+  # Same voice, per-script pace trim (single mode only).  The one voice
+  # speaks both languages but its natural tempo differs by script, so this
+  # keeps Latin (English/Hinglish) and Devanagari (Hindi) in one pace band.
+  # Applied on top of voices.<primary>.rate.
+  script_rate: {latin: -15, devanagari: 0}
 
 # Persona DSP settings
 persona:
@@ -57,22 +79,33 @@ persona:
   target_rms_db: -20.5
   peak_ceiling_db: -1.0
   presence_hz: 7800.0
-  presence_gain: 1.6     # high-frequency air for crisp consonants
+  presence_gain: 1.8     # high-frequency air for crisp consonants
   presence_q: 0.6
 
 # Punctuation handling
 punctuation:
-  sentence_pause_ms: 240
-  pause_jitter: 0.30          # organic micro-pause variation (±30%, 0 = metronomic)
+  sentence_pause_ms: 150     # fallback base when a kind has no pause_ms below
+  pause_jitter: 0.28          # organic micro-pause variation (±28%, 0 = metronomic)
   cognitive_pause:            # occasional slow "thinking of the words" stalls
-    probability: 0.30
-    min_factor: 1.6
-    max_factor: 2.3
-  sentence:  {pause_ms: 240, pitch_drop: true}
-  question:  {pause_ms: 220, pitch_rise: true}
-  exclaim:   {pause_ms: 200, energy_boost: 1.08}   # light lift only — no theatrical projection
-  clause:    {pause_ms: 190}   # mid-sentence breathing pause
-  ellipsis:  {pause_ms: 320, pitch_drop: true}
+    probability: 0.15         # rare — most pauses stay in the 100-200ms band
+    min_factor: 1.2
+    max_factor: 1.4
+  kind_mult: {sentence: 1.0, question: 1.0, exclaim: 1.0, ellipsis: 1.0, clause: 1.0}
+  sentence:  {pause_ms: 150, pitch_drop: true}
+  question:  {pause_ms: 140, pitch_rise: true}
+  exclaim:   {pause_ms: 130, energy_boost: 1.08}   # light lift only — no theatrical projection
+  clause:    {pause_ms: 75}   # micro-pause at commas (50-100ms)
+  ellipsis:  {pause_ms: 180, pitch_drop: true}
+
+# Gap compression: the neural backend inserts its own pauses inside long
+# takes, bypassing pause_ms entirely.  Any interior silence longer than
+# max_silence_ms is shortened to target_ms (with a click-free crossfade).
+gap_compress:
+  enabled: true
+  threshold_db: -50.0
+  max_silence_ms: 220.0
+  target_ms: 160.0
+  fade_ms: 12.0
 
 # Speak like a person: short thoughts, contractions, pauses between phrases
 humanize:
@@ -117,14 +150,42 @@ breath:
   short_phrase_prob_scale: 0.4 # ...short ones breathe far less often
   duration_min: 0.12
   duration_max: 0.20
-  level_normal: 0.065         # very soft — audible, but never veils the speech
-  level_emotional: 0.09
+  level_normal: 0.085         # soft inhalation — clearly audible, never a gasp
+  level_emotional: 0.10
 
 # Emphasis settings (gentle — no sharp synthetic spikes)
 emphasis:
   enabled: true
   boost_db: 1.8
   ramp_factor: 0.4
+
+# Inline emotion tags: [cheerful], [softly], ... switch the emotion for the
+# text that follows them, and are stripped before synthesis (never spoken).
+# A value may be a plain emotion name, or a dict with `emotion` plus
+# per-tag overrides (pitch_hz, rate_pct, volume_db, bright_db, warm_db).
+# Unknown [tags] are left untouched.
+emotion_tags:
+  cheerful: {emotion: happy, pitch_hz: 10, rate_pct: 5, volume_db: 1, bright_db: 1.5}
+  happily: happy
+  joyfully: happy
+  sadly: sad
+  angrily: angry
+  excitedly: excited
+  excited: {emotion: excited, pitch_hz: 3, rate_pct: 4, volume_db: 2}
+  calmly: calm
+  softly: {emotion: gentle, pitch_hz: -4, rate_pct: -3, volume_db: -15, bright_db: -0.5}
+  gently: gentle
+  warmly: {emotion: warm, pitch_hz: 0, rate_pct: -4, volume_db: 0, warm_db: 0.6, bright_db: 0.5}
+  thoughtfully: thoughtful
+  playfully: playful
+  tiredly: tired
+  proudly: proud
+  surprised: surprised
+  reassuringly: reassuring
+  seriously: serious
+  neutrally: neutral
+  whispering: whisper
+  fearfully: fearful
 
 # Vocal effort — gentle projection on content words (subglottic pressure)
 keyword_emphasis:
@@ -135,7 +196,7 @@ keyword_emphasis:
 # Soft indrawn breath before an emphasised word
 keyword_breath:
   enabled: true
-  probability: 0.14
+  probability: 0.10
 
 # Room tone / air settings (disabled per request)
 room_tone:
@@ -160,15 +221,15 @@ air_breath:
 
 # Micro-prosody (subtle natural vocal amplitude variation — non-periodic feel)
 micro_prosody:
-  enabled: true
-  amplitude_shimmer_db: 0.25  # very light — keeps breath dynamics non-periodic
+  enabled: false              # off: 6 Hz shimmer is heard as "shivering" (no measurable tremor benefit)
+  amplitude_shimmer_db: 0.35  # light — keeps breath dynamics non-periodic
   rate_hz: 6.0                # vocal fold modulation rate (~5-8 Hz is natural)
 
 # Vocal fry (creaky voice at phrase endings — strongest when pitch lowers)
 vocal_fry:
-  enabled: true
-  probability: 0.45           # only some phrase endings — realism, not a tic
-  intensity: 0.11             # depth of the creak (0 = none, 0.6 = strong)
+  enabled: false              # off: creak pulses read as "shivering" on Hindi/mixed endings
+  probability: 0.38           # only some phrase endings — realism, not a tic
+  intensity: 0.10             # depth of the creak (0 = none, 0.6 = strong)
   duration_frac: 0.16         # applies to the last 16% of each segment
   max_seconds: 0.40
   pulse_hz: 34.0              # base creak rate; jittered organically per pulse
@@ -205,14 +266,12 @@ word_elongation:
 # Mouth clicks (subtle lip-parting before phrases)
 mouth_click:
   enabled: true
-  probability: 0.18
+  probability: 0.10
   duration_ms: 5.0
   level_db: -45.0            # relative to segment RMS — a hint, not a pop
 
-# Coarticulation smoothing (crossfade between segments)
-coarticulation:
-  enabled: false
-  window_ms: 30.0
+# (Word-linking between takes is handled by humanize.crossfade_ms, and
+# within takes by the neural voices themselves — no separate stage needed.)
 
 # Word-level energy variation (variable syllable/word stress)
 word_life:
@@ -247,14 +306,17 @@ voice_settings:
   swara:
     gain_db: 0.0
     eq:
-      # Minimal de-mud — body/chest must survive for warmth
-      - {type: "pk", freq: 280.0, gain: -0.4, q: 0.9}
+      # Cancel the persona chest-warmth for Hindi only, at its exact centre
+      - {type: "pk", freq: 175.0, gain: -2.0, q: 0.9}
+      # De-thickness: wide cut across the boxy 250-500 Hz low-mid
+      - {type: "pk", freq: 340.0, gain: -3.6, q: 0.7}
+      - {type: "pk", freq: 550.0, gain: -1.6, q: 0.8}
       # Mid presence for consonant definition
-      - {type: "pk", freq: 2800.0, gain: 1.6, q: 0.9}
+      - {type: "pk", freq: 2800.0, gain: 1.8, q: 0.9}
       # Crisp articulation band
-      - {type: "pk", freq: 4500.0, gain: 2.0, q: 0.8}
-      # High shelf air — sibilant clarity
-      - {type: "pk", freq: 9500.0, gain: 2.8, q: 0.6}
+      - {type: "pk", freq: 4500.0, gain: 2.2, q: 0.8}
+      # Air and sparkle — the 'sweet' quality
+      - {type: "pk", freq: 9500.0, gain: 4.0, q: 0.6}
   aria:
     gain_db: 0.0
     eq:
@@ -265,13 +327,13 @@ voice_settings:
 
 # Per-segment variation (conversation drift, not metronome)
 variation:
-  pitch_hz: 1.0
-  rate_pct: 2.0
-  volume_db: 0.6
+  pitch_hz: 1.2
+  rate_pct: 2.4
+  volume_db: 0.9
   burst:                      # fast bursts of words, then slow back down
-    probability: 0.30
+    probability: 0.38
     min_pct: 4
-    max_pct: 9
+    max_pct: 10
 
 # Voice cloning reference
 voice_cloning:
@@ -283,8 +345,8 @@ voice_cloning:
 # Tune freely — the engine reads these and applies them dynamically.
 # ─────────────────────────────────────────────────────────────────────────── #
 sentence_type_rules:
-  sentence:  {pitch:  0, rate:  0, volume:  0}
-  question:  {pitch:  3, rate: -1, volume:  0}   # Questions: slightly higher, slower
+  sentence:  {pitch:  0, rate:  0, volume:  0, terminal_pitch: -2}  # gentle fall at declarative ends
+  question:  {pitch:  3, rate: -1, volume:  0, terminal_pitch: 2}   # slight lift at question ends
   exclaim:   {pitch:  4, rate:  2, volume:  2}   # Exclamations: energetic
   ellipsis:  {pitch: -1, rate: -2, volume: -1}   # Pauses: softer, trailing off
   clause:    {pitch:  1, rate:  0, volume:  0}   # Mid-sentence clause: slight lift
@@ -341,7 +403,7 @@ dynamic_prosody:
       - shayad
       - lagbhag
   intensity_pitch_scale: 0.8   # how much intensity boosts pitch delta
-  intensity_rate_scale:  0.7   # how much intensity boosts rate delta
+  intensity_rate_scale: -0.3   # key content eases very slightly (lighthearted pace comes from emotion rates)
   intensity_volume_scale: 5.0  # vocal effort — strong content projects more energy
 
   # Emotional valence — drives smiling inflection, softening and pause length
@@ -399,7 +461,7 @@ dynamic_prosody:
   smile_pitch_st: 1.4       # semitones of lift on positive phrases
   smile_volume_db: -1.2    # acoustic softening on warm phrases
   smile_rate_pct: -1.5     # warm phrases ease slightly
-  smile_bright_db: 1.2     # sweetness scales with the mood of the sentence
+  smile_bright_db: 1.5     # sweetness scales with the mood of the sentence
   soften_warm_db: 0.5      # warmth scales with tender passages
   valence_pause_scale: 0.14 # emotional subtext lengthens/shortens the pause
   arc_pitch_st: 0.9        # pitch builds as the script's emotion builds

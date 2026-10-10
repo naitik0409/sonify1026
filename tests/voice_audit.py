@@ -52,9 +52,12 @@ class Audit:
         the thresholds are self-calibrating instead of arbitrary."""
         import asyncio
         import edge_tts
-        from snfy.engine import _decode_mp3
+        from snfy.engine import _decode_mp3, _pick_voice, VOICES
 
-        voice = "hi-IN-SwaraNeural" if language == Language.HI_IN else "en-IN-NeerjaNeural"
+        # Use the same voice the engine uses for this text, so the
+        # self-calibrating baseline tracks voice_mode (single vs dual).
+        vkey = _pick_voice(text, self.engine.config.get("default_accent", "in"))
+        voice = VOICES.get(vkey, {}).get("id", "en-IN-NeerjaNeural")
         base = self.engine.config["character"]["base_pitch"]
 
         async def go():
@@ -108,7 +111,8 @@ class Audit:
             (m["peak_db"] <= ceil + 0.05,       f"peak {m['peak_db']:.2f} <= {ceil} dB"),
             (m["sample_rate"] == self.engine.config["output"]["sample_rate"], "sample rate"),
             (m["max_silence"] < 1.6,            f"max silence {m['max_silence']:.2f}s"),
-            (m["max_jump"] < 0.55,              f"max jump {m['max_jump']:.3f}"),
+            (m["splice_jump"] < 0.55,           f"splice jump {m['splice_jump']:.3f}"),
+            (m["max_jump"] < 0.98,              f"max jump {m['max_jump']:.3f}"),
             (m["high"] > 5.0,                   f"4-9k {m['high']:.1f} dB"),
             (m["air"] > -6.0,                   f"9-14k {m['air']:.1f} dB"),
             (185.0 < m["f0_median"] < 300.0,    f"F0 {m['f0_median']:.0f} Hz"),

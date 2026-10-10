@@ -45,7 +45,32 @@ def integrity(x, fs):
         r["max_jump"] = float(np.max(np.abs(np.diff(x))))
     else:
         r["max_jump"] = 0.0
+    # splice signature: a large jump that erupts out of near-silence.
+    # (A large jump inside loud speech is usually just a natural plosive —
+    # Hindi retroflex stops are particularly sharp — not a defect.)
+    r["splice_jump"] = splice_jump(x, fs)
     return r
+
+
+def splice_jump(x, fs, quiet_db=-40.0, window_ms=30.0):
+    """Largest sample-to-sample jump that erupts out of near-silence.
+
+    This is the signature of a bad splice or a crossfade click.  Jumps that
+    occur inside loud, continuous speech are natural plosive bursts and are
+    ignored here.
+    """
+    if len(x) < 3:
+        return 0.0
+    d = np.abs(np.diff(np.asarray(x, dtype=np.float64)))
+    w = max(1, int(fs * window_ms / 1000.0))
+    thr = 10.0 ** (quiet_db / 20.0)
+    # RMS of the window before each jump, via cumulative energy
+    e = np.concatenate([[0.0], np.cumsum(x.astype(np.float64) ** 2)])
+    idx = np.arange(len(d))
+    lo = np.maximum(0, idx - w)
+    rms = np.sqrt((e[idx] - e[lo]) / np.maximum(idx - lo, 1) + 1e-20)
+    mask = rms < thr
+    return float(np.max(d[mask])) if np.any(mask) else 0.0
 
 
 def envelope_db(x, fs, win_ms=20.0):

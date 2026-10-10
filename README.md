@@ -7,6 +7,8 @@
 **An expressive, adaptive Indian female TTS voice engine** — warm, mid-register,
 urban Indian English that code-switches seamlessly into native-standard Hindi.
 
+> Made by **Naitik** · [github.com/naitik0409](https://github.com/naitik0409)
+
 ```bash
 pip install sonify1026
 ```
@@ -43,6 +45,7 @@ engine.synthesize(
 - [Requirements and limits](#requirements-and-limits)
 - [Troubleshooting](#troubleshooting)
 - [Documentation](#documentation)
+- [Author](#author)
 
 ---
 
@@ -64,6 +67,14 @@ Most TTS reads. Sonify **performs**:
   time-stretching in the signal path — so it stays intelligible.
 - **Register safety.** A pitch guard verifies each render sits in the intended
   register and re-renders if a phrase drifts too low or high.
+- **Inline emotion tags.** Write `[cheerful]`, `[softly]`, `[warmly]`… in your
+  script to steer delivery mid-text; tags are never spoken.
+- **Controlled pacing.** Takes split only at sentence ends, per-voice rates
+  keep both languages in the same pace band, and over-long pauses are
+  gently shortened to natural micro-pauses.
+- **One voice, every language.** A single Indian female speaker reads English,
+  Hindi and Hinglish — the identity and accent never change at a code-switch.
+  (See `voice_mode` in the configuration guide.)
 
 ## Installation
 
@@ -246,7 +257,7 @@ Full reference: **[docs/CONFIGURATION.md](docs/CONFIGURATION.md)**.
 ## Testing
 
 ```bash
-pytest tests -q              # 56 objective checks (needs a network)
+pytest tests -q              # 93 objective checks (needs a network)
 python tests/voice_audit.py  # full voice QA report
 ```
 
@@ -283,6 +294,10 @@ More: **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)**.
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Every config key, with tuning guidance |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Problems and fixes |
 | [CHANGELOG.md](CHANGELOG.md) | Release history |
+
+## Author
+
+Built and maintained by **Naitik** — [github.com/naitik0409](https://github.com/naitik0409).
 
 ## License
 

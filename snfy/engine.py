@@ -98,6 +98,12 @@ ACCENTS = {
 }
 DEFAULT_ACCENT = "in"
 
+# Voice selection mode.  "single" uses one voice for every language so the
+# speaker identity (and accent) never changes mid-script; "dual" keeps the
+# legacy English-vs-Devanagari split.  The primary must be a voice the
+# backend can drive across scripts (the hi-IN voices are bilingual).
+VOICE_MODE = {"mode": "dual", "primary": "swara"}
+
 DEV = re.compile(r"[\u0900-\u097F]")
 
 # Keep English in one neural take so commas/questions carry human intonation.
@@ -109,6 +115,8 @@ def _is_hindi(t):
 
 
 def _pick_voice(text, accent):
+    if VOICE_MODE.get("mode", "dual") == "single":
+        return VOICE_MODE.get("primary", "swara")
     if _is_hindi(text):
         return "swara"
     return ACCENTS.get(accent, ACCENTS[DEFAULT_ACCENT])["voice"]
@@ -234,6 +242,46 @@ def _eq(x, fs, sections):
 # --------------------------------------------------------------------------- #
 
 _EM_RE = re.compile(r"\*\*(.+?)\*\*")
+
+_TAG_RE = re.compile(r"\[([A-Za-z]+)\]")
+
+
+def _split_emotion_tags(text, tag_map):
+    """Split text at inline emotion tags like [cheerful] or [softly].
+
+    Returns [(emotion_key_or_None, overrides_dict, span_text)].  A tag
+    switches the emotion for everything after it until the next known tag.
+    A tag value may be a plain emotion name or a dict with `emotion` plus
+    per-tag overrides (pitch_hz, rate_pct, volume_db, bright_db, warm_db).
+    Only tags present in the config map cause a split — unknown bracket text
+    (e.g. "[sic]") is left untouched so it is never silently eaten.
+    """
+    OVERRIDE_KEYS = ("pitch_hz", "rate_pct", "volume_db", "bright_db", "warm_db")
+    spans = []
+    pos = 0
+    cur = None
+    cur_ovr = {}
+    for m in _TAG_RE.finditer(text):
+        raw = (tag_map or {}).get(m.group(1).lower())
+        if isinstance(raw, dict):
+            mapped, ovr = raw.get("emotion"), {k: raw[k] for k in OVERRIDE_KEYS if k in raw}
+        else:
+            mapped, ovr = raw, {}
+        if mapped not in EMOTIONS:
+            # Unknown bracket text is left untouched (it may be intentional),
+            # but warn — a typo'd tag would otherwise be spoken aloud.
+            logger.warning("Unknown emotion tag [%s] left in text; "
+                           "add it to emotion_tags to use it.", m.group(1))
+            continue
+        if m.start() > pos:
+            spans.append((cur, cur_ovr, text[pos:m.start()]))
+        cur, cur_ovr = mapped, ovr
+        pos = m.end()
+    if pos < len(text):
+        spans.append((cur, cur_ovr, text[pos:]))
+    if not spans:
+        spans.append((None, {}, text))
+    return spans
 
 _ABBREV = {
     "dr", "mr", "mrs", "ms", "prof", "sr", "st", "vs", "etc", "e.g", "i.e",
@@ -499,12 +547,18 @@ def _pack_utterances(text, max_chars=MAX_UTTERANCE_CHARS, config=None):
 def _gap_ms(kind, em, rng, config=None):
     if kind is None:
         return 0.0
-    mult = {"sentence": 1.0, "question": 0.90, "exclaim": 0.84,
-            "ellipsis": 1.20, "clause": 0.42}.get(kind, 1.0)
     punct_cfg = (config or {}).get("punctuation", {})
+    # Per-kind base pause; falls back to sentence_pause_ms x kind multiplier.
+    kind_cfg = punct_cfg.get(kind, {}) or {}
+    if isinstance(kind_cfg.get("pause_ms"), (int, float)):
+        base = float(kind_cfg["pause_ms"])
+    else:
+        base_ms = float(punct_cfg.get("sentence_pause_ms", SENTENCE_PAUSE_MS))
+        mult = float((punct_cfg.get("kind_mult", {}) or {}).get(kind, 1.0))
+        base = base_ms * mult
     jitter = float(punct_cfg.get("pause_jitter", 0.05))
     jitter = float(np.clip(jitter, 0.0, 0.9))
-    gap = SENTENCE_PAUSE_MS * em["pause"] * mult * rng.uniform(1.0 - jitter, 1.0 + jitter)
+    gap = base * em["pause"] * rng.uniform(1.0 - jitter, 1.0 + jitter)
     # Slow cognitive pause — "thinking of the words" stall
     cog = punct_cfg.get("cognitive_pause", {}) or {}
     if rng.random() < float(cog.get("probability", 0.0)):
@@ -519,8 +573,10 @@ def _segment(text, emotion, persona, accent_rate, rng, register="normal",
     Segment text into prosody-labelled chunks.  ALL adjustment rules
     (sentence-type, aside, dynamic intensity) are read from config —
     nothing is hardcoded in this function.
+
+    Inline emotion tags like [cheerful] or [softly] switch the emotion for
+    the text that follows them (see `emotion_tags` in config).
     """
-    em  = EMOTIONS.get(emotion, EMOTIONS[DEFAULT_EMOTION])
     reg = REGISTERS.get(register, REGISTERS["normal"])
     var = variation or {}
     cfg = config or {}
@@ -536,75 +592,84 @@ def _segment(text, emotion, persona, accent_rate, rng, register="normal",
     vol_db = 0 if vol_scale >= 0.999 else int(round(20.0 * np.log10(max(vol_scale, 1e-3))))
 
     norm     = _preprocess(text, contractions=use_contractions)
+    tag_map  = cfg.get("emotion_tags", {})
     segments = []
-    for raw, kind in _pack_utterances(norm, max_chars=max_chars, config=cfg):
-        clean = _EM_RE.sub(lambda m: m.group(1), raw).strip()
-        if not clean:
+    for span_emo, span_ovr, span_text in _split_emotion_tags(norm, tag_map):
+        if not span_text.strip():
             continue
-        emph_words = []
-        for m in _EM_RE.finditer(raw):
-            emph_words.extend(re.findall(r"[\w'']+", m.group(1)))
+        seg_emo = span_emo or emotion
+        em = EMOTIONS.get(seg_emo, EMOTIONS[DEFAULT_EMOTION])
+        ovr = span_ovr or {}
+        for raw, kind in _pack_utterances(span_text, max_chars=max_chars, config=cfg):
+            clean = _EM_RE.sub(lambda m: m.group(1), raw).strip()
+            if not clean:
+                continue
+            emph_words = []
+            for m in _EM_RE.finditer(raw):
+                emph_words.extend(re.findall(r"[\w'']+", m.group(1)))
 
-        # ---- Config-driven sentence-type adjustments (no hardcoding) ----
-        is_aside = raw.lstrip().startswith("(")
-        if is_aside:
-            clean = clean.strip("()").strip()
-            aside_rule = type_rules.get("aside", {})
-            p_adj = aside_rule.get("pitch",  -2)
-            r_adj = aside_rule.get("rate",   -1)
-            v_adj = aside_rule.get("volume", -2)
-        else:
-            rule  = type_rules.get(kind or "sentence", {})
-            p_adj = rule.get("pitch",  0)
-            r_adj = rule.get("rate",   0)
-            v_adj = rule.get("volume", 0)
+            # ---- Config-driven sentence-type adjustments (no hardcoding) ----
+            is_aside = raw.lstrip().startswith("(")
+            if is_aside:
+                clean = clean.strip("()").strip()
+                aside_rule = type_rules.get("aside", {})
+                p_adj = aside_rule.get("pitch",  -2)
+                r_adj = aside_rule.get("rate",   -1)
+                v_adj = aside_rule.get("volume", -2)
+            else:
+                rule  = type_rules.get(kind or "sentence", {})
+                p_adj = rule.get("pitch",  0)
+                r_adj = rule.get("rate",   0)
+                v_adj = rule.get("volume", 0)
 
-        # ---- Dynamic text analysis (intensity words + sentence length) ----
-        dyn    = _analyze_text_dynamics(clean, cfg)
-        p_adj += dyn.get("pitch_delta", 0.0)
-        r_adj += dyn.get("rate_delta",  0.0)
-        v_adj += dyn.get("volume_delta", 0.0)
+            # ---- Dynamic text analysis (intensity words + sentence length) ----
+            dyn    = _analyze_text_dynamics(clean, cfg)
+            p_adj += dyn.get("pitch_delta", 0.0) + float(ovr.get("pitch_hz", 0.0))
+            r_adj += dyn.get("rate_delta",  0.0) + float(ovr.get("rate_pct", 0.0))
+            v_adj += dyn.get("volume_delta", 0.0) + float(ovr.get("volume_db", 0.0))
 
-        pitch_var = var.get("pitch_hz",   0.6)
-        rate_var  = var.get("rate_pct",   0.6)
-        vol_var   = var.get("volume_db",  0.4)
+            pitch_var = var.get("pitch_hz",   0.6)
+            rate_var  = var.get("rate_pct",   0.6)
+            vol_var   = var.get("volume_db",  0.4)
 
-        char_cfg = cfg.get("character", {})
-        p_lo = int(char_cfg.get("pitch_min", -20))
-        p_hi = int(char_cfg.get("pitch_max", 25))
-        pitch = int(np.clip(persona.base_pitch + em["pitch"] + p_adj
-                            + reg["pitch"] + pitch_off
-                            + rng.uniform(-pitch_var, pitch_var), p_lo, p_hi))
-        # Fast burst — occasionally a quick run of words
-        burst = var.get("burst", {}) or {}
-        burst_delta = 0.0
-        if rng.random() < float(burst.get("probability", 0.0)):
-            burst_delta = rng.uniform(float(burst.get("min_pct", 4.0)),
-                                      float(burst.get("max_pct", 9.0)))
-        rate  = _shift_pct(em["rate"],
-                           accent_rate + r_adj + reg["rate"] + speed_rate
-                           + burst_delta
-                           + rng.uniform(-rate_var, rate_var))
-        vol   = int(np.clip(int(em["volume"].rstrip("%")) + reg["vol"] + v_adj
-                            + vol_db + rng.uniform(-vol_var, vol_var), -30, 20))
-        segments.append(dict(
-            text=clean,
-            pitch=pitch,
-            rate=rate,
-            volume=f"{vol:+d}%",
-            bright=em["bright"] + reg["bright"] + dyn.get("bright_delta", 0.0),
-            warm=em["warm"] + dyn.get("warm_delta", 0.0),
-            pause_ms=_gap_ms(kind, em, rng, cfg) * reg["pause"]
-                      * float(dyn.get("pause_scale", 1.0)),
-            emph=[w.lower() for w in emph_words],
-            key_words=dyn.get("key_words", []),
-            low_words=dyn.get("low_words", []),
-            breath_scale=dyn.get("breath_scale", 1.0),
-            effort=dyn.get("effort", 0.0),
-            valence=dyn.get("valence", 0.0),
-            emo=emotion,
-            kind=kind,
-        ))
+            char_cfg = cfg.get("character", {})
+            p_lo = int(char_cfg.get("pitch_min", -20))
+            p_hi = int(char_cfg.get("pitch_max", 25))
+            pitch = int(np.clip(persona.base_pitch + em["pitch"] + p_adj
+                                + reg["pitch"] + pitch_off
+                                + rng.uniform(-pitch_var, pitch_var), p_lo, p_hi))
+            # Fast burst — occasionally a quick run of words
+            burst = var.get("burst", {}) or {}
+            burst_delta = 0.0
+            if rng.random() < float(burst.get("probability", 0.0)):
+                burst_delta = rng.uniform(float(burst.get("min_pct", 4.0)),
+                                          float(burst.get("max_pct", 9.0)))
+            rate  = _shift_pct(em["rate"],
+                               accent_rate + r_adj + reg["rate"] + speed_rate
+                               + burst_delta
+                               + rng.uniform(-rate_var, rate_var))
+            vol   = int(np.clip(int(em["volume"].rstrip("%")) + reg["vol"] + v_adj
+                                + vol_db + rng.uniform(-vol_var, vol_var), -30, 20))
+            segments.append(dict(
+                text=clean,
+                pitch=pitch,
+                rate=rate,
+                volume=f"{vol:+d}%",
+                bright=em["bright"] + reg["bright"] + dyn.get("bright_delta", 0.0)
+                        + float(ovr.get("bright_db", 0.0)),
+                warm=em["warm"] + dyn.get("warm_delta", 0.0)
+                      + float(ovr.get("warm_db", 0.0)),
+                pause_ms=_gap_ms(kind, em, rng, cfg) * reg["pause"]
+                          * float(dyn.get("pause_scale", 1.0)),
+                emph=[w.lower() for w in emph_words],
+                key_words=dyn.get("key_words", []),
+                low_words=dyn.get("low_words", []),
+                breath_scale=dyn.get("breath_scale", 1.0),
+                effort=dyn.get("effort", 0.0),
+                valence=dyn.get("valence", 0.0),
+                emo=seg_emo,
+                kind=kind,
+            ))
     return segments
 
 
@@ -687,6 +752,77 @@ def _fade(x, fs, ms=5.0):
     x[:n] *= np.linspace(0.0, 1.0, n)
     x[-n:] *= np.linspace(1.0, 0.0, n)
     return x
+
+
+def _compress_gaps(x: np.ndarray, fs: int,
+                   config: Optional[Dict] = None) -> np.ndarray:
+    """Shorten over-long interior silences to a natural micro-pause.
+
+    The neural backend inserts its own pauses inside long takes, which can
+    run far beyond the configured pause range.  Any interior silence longer
+    than `max_silence_ms` is shortened to `target_ms` with a short crossfade
+    so no click is introduced.  Leading/trailing file silence is untouched.
+    Config: 'gap_compress' in voice_config.yaml.
+    """
+    cfg = (config or {}).get("gap_compress", {})
+    if not cfg.get("enabled", False) or len(x) < fs // 2:
+        return x
+    thr_db  = float(cfg.get("threshold_db", -50.0))
+    max_ms  = float(cfg.get("max_silence_ms", 220.0))
+    tgt_ms  = float(cfg.get("target_ms", 160.0))
+    fade_ms = float(cfg.get("fade_ms", 12.0))
+    if tgt_ms >= max_ms or tgt_ms <= 0:
+        return x
+
+    thr = 10.0 ** (thr_db / 20.0)
+    h = max(1, int(fs * 0.01))
+    n = len(x) // h
+    if n < 4:
+        return x
+    env = np.array([np.sqrt(np.mean(x[i * h:(i + 1) * h] ** 2))
+                    for i in range(n)])
+    quiet = env < thr
+
+    # interior runs only — never touch file edges
+    runs = []
+    i = 1
+    while i < n - 1:
+        if quiet[i]:
+            j = i
+            while j < n - 1 and quiet[j]:
+                j += 1
+            if (j - i) * 10.0 >= max_ms:
+                runs.append((i * h, min(j * h, len(x))))
+            i = j
+        else:
+            i += 1
+    if not runs:
+        return x
+
+    keep_n = int(tgt_ms * fs / 1000.0)
+    fade_n = int(max(1, fade_ms * fs / 1000.0))
+
+    def shorten(a, b):
+        """Shorten gap [a, b): keep the first keep_n samples, then blend
+        into the resumed audio.  Returns (shortened_audio, samples_consumed)
+        so the caller can resume exactly where the crossfade ends."""
+        keep = min(keep_n, max(fade_n * 2, (b - a) - fade_n))
+        head = x[a:a + keep]
+        m = min(fade_n, len(head), max(0, len(x) - b))
+        if m > 1:
+            w = np.linspace(0.0, 1.0, m)
+            joint = head[-m:] * (1.0 - w) + x[b:b + m] * w
+            return np.concatenate([head[:-m], joint]), m
+        return head, 0
+
+    parts = [x[:runs[0][0]]]
+    for k, (a, b) in enumerate(runs):
+        short, consumed = shorten(a, b)
+        parts.append(short)
+        nxt = runs[k + 1][0] if k + 1 < len(runs) else len(x)
+        parts.append(x[b + consumed:nxt])
+    y = np.concatenate([p for p in parts if len(p)])
+    return y.astype(x.dtype) if len(y) else x
 
 
 def _emphasis_env(x, fs, word_times, emph_words, boost_db=2.5, ramp_factor=0.35):
@@ -1482,6 +1618,23 @@ def master(track, fs, em, persona: Persona, rng, config: Optional[Dict] = None):
 # Render                                                                       #
 # --------------------------------------------------------------------------- #
 
+def _apply_terminal(segments, cfg):
+    """Shape the utterance-final segment: gentle fall on declarative endings,
+    slight lift on question endings.  Deltas come from
+    `sentence_type_rules.<kind>.terminal_pitch` — nothing hardcoded."""
+    if not segments:
+        return
+    last = segments[-1]
+    if last.get("is_filler", False):
+        return
+    t_rule = (cfg or {}).get("sentence_type_rules", {}).get(
+        last.get("kind") or "sentence", {})
+    t_delta = int(t_rule.get("terminal_pitch", 0))
+    if t_delta:
+        v = VOICES[last["vkey"]]
+        last["pitch"] = int(np.clip(last["pitch"] + t_delta, v["lo"], v["hi"]))
+
+
 def render(text, out_wav, emotion=DEFAULT_EMOTION, persona: Persona = None,
            accent=DEFAULT_ACCENT, seed=20261009, breaths=True, config=None, register=DEFAULT_REGISTER):
     return render_arc([(text, emotion)], out_wav, persona=persona,
@@ -1583,9 +1736,22 @@ def render_arc(steps, out_wav, persona: Persona = None,
                 placed.append(fseg)
             segments = placed
 
+    vm = cfg.get("voice_mode", {})
+    single_mode = vm.get("mode") == "single"
+    script_rate = vm.get("script_rate", {}) if single_mode else {}
     for s in segments:
         v = VOICES[s["vkey"]]
-        s["pitch"] = int(np.clip(s["pitch"] + v["pitch"], v["lo"], v["hi"]))
+        s["pitch"] = int(np.clip(s["pitch"] + v.get("pitch", 0), v["lo"], v["hi"]))
+        rate_off = int(v.get("rate", 0))
+        if single_mode and script_rate:
+            # Same voice, per-script pace trim: the one voice can speak both
+            # languages but its natural tempo differs by script.  Keeps the
+            # identity fixed while both languages land in the target band.
+            key = "devanagari" if _is_hindi(s["text"]) else "latin"
+            rate_off += int(script_rate.get(key, 0))
+        if rate_off:
+            # Per-voice (and per-script) rate offset.
+            s["rate"] = _shift_pct(s["rate"], rate_off)
 
     # ---- Adaptive emotional arc ----------------------------------------
     # A script that builds in feeling should sound like it builds: each
@@ -1603,6 +1769,13 @@ def render_arc(steps, out_wav, persona: Persona = None,
             s["pitch"] = int(np.clip(s["pitch"] + int(round(drift * arc_gain_p)),
                                      VOICES[s["vkey"]]["lo"], VOICES[s["vkey"]]["hi"]))
             s["arc_volume_db"] = drift * arc_gain_v
+
+    # ---- Terminal intonation ---------------------------------------------
+    # Gentle fall on declarative endings, slight lift on question endings.
+    # Each take already carries its native edge-tts contour; this only shapes
+    # the utterance-final segment so multi-take speech still lands naturally.
+    # Applied BEFORE smoothing so the final seam still glides (max step).
+    _apply_terminal(segments, cfg)
 
     # ---- Smooth the pitch trajectory across takes ------------------------
     # Consecutive takes can be given quite different pitch targets, which
@@ -1708,8 +1881,9 @@ def render_arc(steps, out_wav, persona: Persona = None,
         x        = _apply_pitch_arc(x.astype(np.float64), fs, contour, hop_ms=hop_ms)
 
         # ---- Micro-prosody shimmer (natural vocal variation) -------------
-        x = _apply_micro_prosody(x.astype(np.float32), fs, rng,
-                                 cfg.get("micro_prosody", {}))
+        mp_cfg = cfg.get("micro_prosody", {})
+        if mp_cfg.get("enabled", False):
+            x = _apply_micro_prosody(x.astype(np.float32), fs, rng, mp_cfg)
 
         # ---- Vocal fry — probabilistic, strongest when pitch is lowered --
         fry_cfg = cfg.get("vocal_fry", {})
@@ -1799,6 +1973,10 @@ def render_arc(steps, out_wav, persona: Persona = None,
     pos += tail
     track = track[:max(pos, 1)]
 
+    # Shrink the backend's own over-long pauses inside takes down to the
+    # configured micro-pause range (they bypass pause_ms entirely).
+    track = _compress_gaps(track.astype(np.float64), fs, cfg)
+
     master_emotion = EMOTIONS.get(steps[0][1], EMOTIONS["neutral"])
     y, fs_out = master(track, fs, master_emotion, persona, rng, config=cfg)
 
@@ -1876,11 +2054,13 @@ class SonifyEngine:
         if punct.get("sentence_pause_ms") is not None:
             SENTENCE_PAUSE_MS = punct["sentence_pause_ms"]
 
-        global EMOTIONS, VOICES, ACCENTS, DEFAULT_ACCENT
+        global EMOTIONS, VOICES, ACCENTS, DEFAULT_ACCENT, VOICE_MODE
         if self.config.get("emotions"):
             EMOTIONS = self.config["emotions"]
         if self.config.get("voices"):
             VOICES = self.config["voices"]
+        if self.config.get("voice_mode"):
+            VOICE_MODE = {**VOICE_MODE, **self.config["voice_mode"]}
         if self.config.get("accents"):
             ACCENTS = self.config["accents"]
         if self.config.get("default_accent"):

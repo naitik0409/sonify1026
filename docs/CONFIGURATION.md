@@ -80,9 +80,9 @@ emotions:
 
 ```yaml
 voices:
-  neerja: {id: "en-IN-NeerjaNeural", pitch: 0, lo: -45, hi: 25}
-  swara:  {id: "hi-IN-SwaraNeural",  pitch: 0, lo: -45, hi: 25}
-  aria:   {id: "en-US-AriaNeural",   pitch: 0, lo: -45, hi: 25}
+  neerja: {id: "en-IN-NeerjaNeural", pitch: 0,  rate: -7,  lo: -45, hi: 25}
+  swara:  {id: "hi-IN-SwaraNeural",  pitch: 10, rate: 8,   lo: -45, hi: 25}
+  aria:   {id: "en-US-AriaNeural",   pitch: 0,  rate: 0,   lo: -45, hi: 25}
 
 accents:
   in: {voice: "neerja", rate: -2, label: "Indian English"}
@@ -94,6 +94,40 @@ Any Edge TTS voice ID works. `pitch` is an extra per-voice offset; `lo`/`hi`
 bound it. **Keep `lo` at or below `character.base_pitch`** or the offset will be
 clipped away.
 
+`rate` is a per-voice pace offset in the same units as the emotion `rate`
+strings. Use it when one voice is naturally quicker than the other — here
+Neerja is slowed and Swara quickened so both land in the same pace band
+without touching the other voice.
+
+## `voice_mode`
+
+Controls whether one voice speaks every language or the voice flips on
+code-switching.
+
+```yaml
+voice_mode:
+  mode: single          # single | dual
+  primary: swara
+  script_rate: {latin: -15, devanagari: 0}
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `mode` | `single` | `single` = one voice for all scripts; `dual` = legacy English/Devanagari split |
+| `primary` | `swara` | The voice used in single mode. Must be one the backend can drive across scripts |
+| `script_rate` | `{latin: -15, devanagari: 0}` | Single-mode only. Per-script pace trim added on top of `voices.<primary>.rate` |
+
+**`single` (the default) fixes the speaker identity.** Microsoft's en-IN
+voices (`Neerja`, `Prabhat`) are English-only — they return *no audio* for
+Devanagari and silently drop Hindi words in mixed text. The hi-IN voices
+(`Swara`, `Madhur`) are genuinely bilingual, so a single one of them can read
+English, Hindi and Hinglish as one person, with one Indian accent. `script_rate`
+compensates for the fact that the same voice speaks slightly faster in one
+script than the other, so both stay in the target pace band.
+
+Set `mode: dual` to restore the previous behaviour (English voice for Latin
+text, `swara` for Devanagari); the voice then changes at a code-switch.
+
 ## `persona`
 
 The DSP character of the voice.
@@ -101,14 +135,14 @@ The DSP character of the voice.
 | Key | Default | Meaning |
 |---|---|---|
 | `highpass_hz` | `95.0` | Rumble filter. Raise to thin the voice, lower for more body |
-| `warm_hz` | `175.0` | Centre frequency of the chest-resonance boost |
-| `warm_gain` | `0.65` | Chest-resonance depth. **The warmth control** |
+| `warm_hz` | `190.0` | Centre frequency of the chest-resonance boost |
+| `warm_gain` | `0.85` | Chest-resonance depth. **The warmth control** |
 | `pres_hz` | `3400.0` | Presence frequency (articulation) |
 | `pres_gain` | `1.3` | Presence depth — raise for clearer consonants |
 | `target_rms_db` | `-20.5` | Loudness target |
 | `peak_ceiling_db` | `-1.0` | Peak ceiling. Enforced after resampling |
 | `presence_hz` | `7800.0` | Air frequency |
-| `presence_gain` | `1.6` | Air / brightness. Raise for a brighter, younger voice |
+| `presence_gain` | `1.8` | Air / brightness. Raise for a brighter, younger voice |
 
 > If the voice sounds dull or unclear, raise `pres_gain` and `presence_gain`
 > before touching anything else. If it sounds harsh, lower them.
@@ -117,10 +151,45 @@ The DSP character of the voice.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `sentence_pause_ms` | `240` | Base pause between sentences |
-| `pause_jitter` | `0.30` | Random ±30% on every pause. `0` = robotic; raise for more drift |
-| `sentence` / `question` / `exclaim` / `clause` / `ellipsis` | — | Per-type `pause_ms`, plus `pitch_drop` / `pitch_rise` / `energy_boost` |
-| `cognitive_pause` | — | `{probability, min_factor, max_factor}` — occasional long "thinking" pauses |
+| `sentence_pause_ms` | `150` | Fallback base pause when a kind has no `pause_ms` |
+| `pause_jitter` | `0.28` | Random ±28% on every pause. `0` = robotic; raise for more drift |
+| `sentence` / `question` / `exclaim` / `clause` / `ellipsis` | — | Per-type `pause_ms` (150/140/130/75/180), plus `pitch_drop` / `pitch_rise` / `energy_boost` |
+| `kind_mult` | all `1.0` | Fine relative multipliers, applied when a kind lacks `pause_ms` |
+| `cognitive_pause` | — | `{probability: 0.15, min_factor: 1.2, max_factor: 1.4}` — rare "thinking" stalls |
+
+## `gap_compress`
+
+The neural backend inserts its own pauses inside long takes, bypassing
+`pause_ms` entirely. Any interior silence longer than `max_silence_ms` is
+shortened to `target_ms` with a click-free crossfade.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `true` | Master switch |
+| `threshold_db` | `-50.0` | Below this counts as silence |
+| `max_silence_ms` | `220.0` | Longer silences get shortened |
+| `target_ms` | `160.0` | What they are shortened to |
+| `fade_ms` | `12.0` | Crossfade length at the joint |
+
+## `emotion_tags`
+
+Inline tags like `[cheerful]` switch emotion mid-text and are stripped before
+synthesis. A value is a plain emotion name or a dict with `emotion` plus
+overrides (`pitch_hz`, `rate_pct`, `volume_db`, `bright_db`, `warm_db`):
+
+```yaml
+emotion_tags:
+  cheerful: {emotion: happy, pitch_hz: 10, rate_pct: 5, volume_db: 1, bright_db: 1.5}
+  softly:   {emotion: gentle, pitch_hz: -4, rate_pct: -3, volume_db: -15, bright_db: -0.5}
+  warmly:   {emotion: warm, pitch_hz: 0, rate_pct: -4, volume_db: 0, warm_db: 0.6, bright_db: 0.5}
+```
+
+Unknown `[tags]` pass through untouched (with a warning logged).
+
+## `sentence_type_rules`
+
+Per-punctuation prosody, including `terminal_pitch` shaping on the final take
+(negative = fall on declaratives, positive = lift on questions).
 
 ## `humanize`
 
@@ -213,7 +282,7 @@ dynamic_prosody:
 | `keyword_emphasis.boost_db` | `2.0` | Emphasis depth |
 | `keyword_emphasis.soften_db` | `-1.2` | Hedging words delivered more softly |
 | `keyword_breath.enabled` | `true` | Small breath before an emphasised word |
-| `keyword_breath.probability` | `0.14` | How often |
+| `keyword_breath.probability` | `0.10` | How often |
 
 ## Imperfection controls
 
@@ -222,15 +291,14 @@ human, less polished delivery.
 
 | Section | Key | Meaning |
 |---|---|---|
-| `micro_prosody` | `enabled` | **on** — `amplitude_shimmer_db` (0.25), `rate_hz` (6.0). Amplitude shimmer |
-| `vocal_fry` | `enabled`, `probability` (0.45), `intensity` (0.11), `duration_frac`, `max_seconds`, `pulse_hz` | Creak at phrase endings |
-| `mouth_click` | `enabled`, `probability` (0.18), `duration_ms`, `level_db` (-45) | Lip-parting transient |
+| `micro_prosody` | `enabled` | **Off.** `amplitude_shimmer_db` (0.35), `rate_hz` (6.0). 6 Hz amplitude shimmer — heard as "shivering" |
+| `vocal_fry` | `enabled`, `probability` (0.38), `intensity` (0.10), `duration_frac`, `max_seconds`, `pulse_hz` | **Off.** Creak at phrase endings — pulses read as "shivering" on Hindi/mixed |
+| `mouth_click` | `enabled`, `probability` (0.10), `duration_ms`, `level_db` (-45) | Lip-parting transient |
 | `pause_filler` | `enabled` | **Spoken hesitations ("uhm"). Off by default** — reads as a stray "ahm" at the end |
 | `word_life` | `enabled`, `db` (1.4) | Word-level energy variation |
 | `phrase_swell` | `enabled`, `db` (1.6) | Phrase-level amplitude contour |
 | `room_tone` | `enabled`, `room_ratio`, `breath_ratio` | Room ambience |
 | `air_breath` | `lowpass_hz`, `bandwidth`, `intensity_offset` | Breath-noise character |
-| `coarticulation` | `enabled`, `window_ms` | Smoothing across segments |
 | `pitch_contour` | `enabled` | **Off.** Time-domain pitch arc — it smears consonants |
 | `word_elongation` | `enabled` | **Off.** Time-domain stretching — blurs consonants |
 
@@ -251,10 +319,10 @@ human, less polished delivery.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `pitch_hz` | `1.0` | Random pitch drift per segment |
-| `rate_pct` | `2.0` | Random rate drift per segment |
-| `volume_db` | `0.6` | Random level drift per segment |
-| `burst` | `{probability: 0.30, min_pct: 4, max_pct: 9}` | Occasional fast runs of words |
+| `pitch_hz` | `1.2` | Random pitch drift per segment |
+| `rate_pct` | `2.4` | Random rate drift per segment |
+| `volume_db` | `0.9` | Random level drift per segment |
+| `burst` | `{probability: 0.38, min_pct: 4, max_pct: 10}` | Occasional fast runs of words |
 
 ## `voice_settings`
 

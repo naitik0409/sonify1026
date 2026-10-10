@@ -16,25 +16,23 @@ You need: a PyPI account, a verified email, and ~15 minutes.
 
 ---
 
-## 1. Fill in your details
+## 1. Your details (already set)
 
-Open `pyproject.toml` and replace the three placeholders:
+`pyproject.toml` already carries the real values:
 
 ```toml
 authors = [
-    {name = "Sonify 1026", email = "you@yourmail.com"},      # line 14
+    {name = "Naitik", email = "sanjeevshrivastava898@gmail.com"},
 ]
 maintainers = [
-    {name = "Sonify 1026", email = "you@yourmail.com"},      # line 17
+    {name = "Naitik", email = "sanjeevshrivastava898@gmail.com"},
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourname/sonify1026"          # line 65
-Source   = "https://github.com/yourname/sonify1026"
-Issues   = "https://github.com/yourname/sonify1026/issues"
+Homepage = "https://github.com/naitik0409/sonify1026"
+Source   = "https://github.com/naitik0409/sonify1026"
+Issues   = "https://github.com/naitik0409/sonify1026/issues"
 ```
-
-Skip the URLs if you have no GitHub repo yet — they are optional.
 
 ---
 
@@ -215,26 +213,27 @@ Use semantic versioning: `0.1.0` → `0.1.1` (fixes), `0.2.0` (new features),
 
 ## Optional: source code on GitHub
 
-Keeping the source public builds trust and lets people install from git:
+Keeping the source public builds trust and lets people install from git.
+The repo already lives at `github.com/naitik0409/sonify1026`:
 
 ```bash
 git init
 git add .
-git commit -m "Sonify 1026 v0.1.0"
+git commit -m "Sonify 1026 v0.1.1"
 git branch -M main
-git remote add origin https://github.com/yourname/sonify1026.git
+git remote add origin https://github.com/naitik0409/sonify1026.git
 git push -u origin main
 ```
 
 Anyone can then use it without PyPI:
 
 ```bash
-pip install git+https://github.com/yourname/sonify1026.git
+pip install git+https://github.com/naitik0409/sonify1026.git
 ```
 
 Add a release tag so versions are traceable:
 
 ```bash
-git tag v0.1.0
+git tag v0.1.1
 git push --tags
 ```
