@@ -24,7 +24,8 @@ engine.synthesize(
 )
 ```
 
-> Installed as **`sonify1026`**, imported as **`snfy`** — the same pattern as
+> Installed as **`sonify1026`** (or the alias **`snfy`** — `pip install snfy`
+> installs the same engine), imported as **`snfy`** — the same pattern as
 > `pip install beautifulsoup4` → `import bs4`.
 
 ---
