@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.1.2] — 2026-10-10
+
+### Packaging
+- **`pip install snfy` now works.** A thin alias distribution named `snfy`
+  installs the engine (`sonify1026`), so both names install the same code and
+  `import snfy` is unchanged.
+- GitHub Actions workflows auto-publish `sonify1026` and `snfy` to PyPI when a
+  GitHub Release is published (Trusted Publishing or `PYPI_API_TOKEN`).
+- Docs: installation and troubleshooting now mention the `snfy` alias.
+
 ## [0.1.1] — 2026-10-10
 
 ### Voice

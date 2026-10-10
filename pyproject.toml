@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sonify1026"
-version = "0.1.1"
+version = "0.1.2"
 description = "Expressive Indian female TTS voice engine with adaptive emotion, prosody and EN/HI code-switching"
 readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.9"

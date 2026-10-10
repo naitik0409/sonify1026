@@ -262,7 +262,7 @@ The repo already lives at `github.com/naitik0409/sonify1026`:
 ```bash
 git init
 git add .
-git commit -m "Sonify 1026 v0.1.1"
+git commit -m "Sonify 1026 v0.1.2"
 git branch -M main
 git remote add origin https://github.com/naitik0409/sonify1026.git
 git push -u origin main
@@ -277,6 +277,6 @@ pip install git+https://github.com/naitik0409/sonify1026.git
 Add a release tag so versions are traceable:
 
 ```bash
-git tag v0.1.1
+git tag v0.1.2
 git push --tags
 ```

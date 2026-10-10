@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "snfy"
-version = "0.1.1"
+version = "0.1.2"
 description = "Alias for sonify1026 - `pip install snfy` is the same as `pip install sonify1026`"
 readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.9"
@@ -37,7 +37,7 @@ classifiers = [
     "Natural Language :: Hindi",
 ]
 dependencies = [
-    "sonify1026>=0.1.1",
+    "sonify1026>=0.1.2",
 ]
 
 [project.urls]
