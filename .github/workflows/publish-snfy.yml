@@ -19,19 +19,39 @@ jobs:
         with:
           python-version: "3.12"
 
+      # Only publish when the release tag matches the alias version, so a
+      # release for the engine does not re-publish an existing alias version.
+      # Use a tag like "snfy-v0.1.2" (or bump both versions together).
+      - name: Resolve versions
+        id: ver
+        run: |
+          PKG=$(python -c "import tomllib;print(tomllib.load(open('snfy-meta/pyproject.toml','rb'))['project']['version'])")
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then TAG="${GITHUB_REF_NAME#snfy-v}"; TAG="${TAG#v}"; else TAG="$PKG"; fi
+          if [ "$TAG" = "$PKG" ]; then MATCH=true; else MATCH=false; fi
+          echo "package=$PKG tag=$TAG match=$MATCH"
+          echo "match=$MATCH" >> "$GITHUB_OUTPUT"
+
       - name: Install build tooling
+        if: steps.ver.outputs.match == 'true'
         run: python -m pip install --upgrade build twine
 
       - name: Build sdist and wheel
+        if: steps.ver.outputs.match == 'true'
         run: python -m build
         working-directory: snfy-meta
 
       - name: Check distributions
+        if: steps.ver.outputs.match == 'true'
         run: python -m twine check dist/*
         working-directory: snfy-meta
 
       - name: Publish to PyPI
+        if: steps.ver.outputs.match == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: snfy-meta/dist
           password: ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: Nothing to publish
+        if: steps.ver.outputs.match != 'true'
+        run: echo "Release tag does not match snfy alias version; skipping."
