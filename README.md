@@ -2,12 +2,16 @@
 
 [![PyPI](https://img.shields.io/pypi/v/sonify1026.svg)](https://pypi.org/project/sonify1026/)
 [![Python](https://img.shields.io/pypi/pyversions/sonify1026.svg)](https://pypi.org/project/sonify1026/)
+[![Downloads](https://img.shields.io/pypi/dm/sonify1026.svg)](https://pypi.org/project/sonify1026/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Live%20demo-Space-ffbf00)](https://huggingface.co/spaces/naitik0409/sonify1026)
 
 **An expressive, adaptive Indian female TTS voice engine** — warm, mid-register,
 urban Indian English that code-switches seamlessly into native-standard Hindi.
 
 > Made by **Naitik** · [github.com/naitik0409](https://github.com/naitik0409)
+
+[![Sonify 1026 — sample render](assets/demo.gif)](https://huggingface.co/spaces/naitik0409/sonify1026)
 
 ```bash
 pip install sonify1026
@@ -32,7 +36,10 @@ engine.synthesize(
 
 ## Contents
 
+- [Hear it](#hear-it)
 - [Why Sonify](#why-sonify)
+- [How it compares](#how-it-compares)
+- [Use cases](#use-cases)
 - [Installation](#installation)
 - [Importing](#importing)
 - [Quickstart](#quickstart)
@@ -49,6 +56,23 @@ engine.synthesize(
 - [Author](#author)
 
 ---
+
+## Hear it
+
+**No install needed — type your own text in the live demo:**
+
+### ▶️ [Sonify 1026 on Hugging Face Spaces](https://huggingface.co/spaces/naitik0409/sonify1026)
+
+A few sample renders from the engine (click to play):
+
+| Clip | Emotion | Text |
+|---|---|---|
+| [01 · neutral](assets/samples/01_neutral.mp3) | `neutral` | This is a neutral sample from the Sonify voice engine. |
+| [02 · happy](assets/samples/02_happy.mp3) | `happy` | That is wonderful news — I am so happy for you! |
+| [03 · warm](assets/samples/03_warm.mp3) | `warm` | Take your time. There is no rush at all. |
+| [04 · whisper](assets/samples/04_whisper.mp3) | `whisper` | Come closer, I will tell you a secret. |
+| [05 · Hinglish](assets/samples/05_hinglish.mp3) | `neutral` | Yaar, kal ki meeting bahut important hai. |
+| [06 · Hindi](assets/samples/06_hindi.mp3) | `warm` | ठीक है, जो करो पूरे मन से करो। |
 
 ## Why Sonify
 
@@ -76,6 +100,34 @@ Most TTS reads. Sonify **performs**:
 - **One voice, every language.** A single Indian female speaker reads English,
   Hindi and Hinglish — the identity and accent never change at a code-switch.
   (See `voice_mode` in the configuration guide.)
+
+## How it compares
+
+| | **Sonify 1026** | raw `edge-tts` | `gTTS` | `pyttsx3` | Cloud TTS¹ |
+|---|---|---|---|---|---|
+| Emotion control | **17 adaptive presets** | SSML only | — | — | paid SSML |
+| Adaptive prosody | **yes** | no | no | no | partial |
+| Hinglish in one voice | **yes** | manual switch | no | no | partial |
+| API key / cost | **none · free** | none · free | free² | free | paid |
+| Works offline | fallback³ | no | no | yes | no |
+| Indian female voice | **tuned** | available | generic | OS-dependent | available |
+| Setup | `pip install` | low-level | `pip install` | needs a driver | SDK + key |
+
+¹ Amazon Polly / Azure / Google. ² `gTTS` uses Google's endpoint (no key, but
+network + ToS apply). ³ `set_offline_mode()` falls back to `pyttsx3` at lower
+quality. Sonify is a **performance layer on top of** `edge-tts`: it does not
+train its own model, it makes the free voices *act*.
+
+## Use cases
+
+- **AI agents & voice assistants** — give an LLM a warm, expressive Indian
+  voice that stays in character.
+- **Audiobooks & narration** — emotional arcs across long scripts.
+- **IVR, telephony & announcements** — natural Hinglish prompts.
+- **Video voiceover & short-form** — quick, human-sounding reads.
+- **Accessibility & screen reading** — clearer, warmer delivery.
+- **E-learning & edtech** — one speaker for English and Hindi lessons.
+- **Notifications & alerts** — warm or serious, chosen per message.
 
 ## Installation
 
@@ -265,7 +317,7 @@ Full reference: **[docs/CONFIGURATION.md](docs/CONFIGURATION.md)**.
 ## Testing
 
 ```bash
-pytest tests -q              # 93 objective checks (needs a network)
+pytest tests -q              # 96 objective checks (needs a network)
 python tests/voice_audit.py  # full voice QA report
 ```
 

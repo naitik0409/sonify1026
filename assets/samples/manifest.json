@@ -1,0 +1,44 @@
+[
+  {
+    "file": "01_neutral.mp3",
+    "emotion": "neutral",
+    "language": "auto",
+    "text": "This is a neutral sample from the Sonify voice engine.",
+    "duration": 3.69
+  },
+  {
+    "file": "02_happy.mp3",
+    "emotion": "happy",
+    "language": "auto",
+    "text": "That is wonderful news - I am so happy for you!",
+    "duration": 3.35
+  },
+  {
+    "file": "03_warm.mp3",
+    "emotion": "warm",
+    "language": "auto",
+    "text": "Take your time. There is no rush at all.",
+    "duration": 3.93
+  },
+  {
+    "file": "04_whisper.mp3",
+    "emotion": "whisper",
+    "language": "auto",
+    "text": "Come closer, I will tell you a secret.",
+    "duration": 2.86
+  },
+  {
+    "file": "05_hinglish.mp3",
+    "emotion": "neutral",
+    "language": "auto",
+    "text": "Yaar, kal ki meeting bahut important hai.",
+    "duration": 3.42
+  },
+  {
+    "file": "06_hindi.mp3",
+    "emotion": "warm",
+    "language": "auto",
+    "text": "ठीक है, जो करो पूरे मन से करो।",
+    "duration": 3.25
+  }
+]
