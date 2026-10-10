@@ -320,39 +320,20 @@ registers:
 default_register: "casual"    # off-the-cuff voice-note delivery by default
 
 # Per-voice settings
+# No per-voice EQ by default: the delivered voice should keep the backend's
+# natural body and chest warmth (the persona stage already adds gentle
+# presence).  A previous "de-thickness" curve on the default voice cut
+# 175-550 Hz and boosted 2.8k-9.5k, which made the voice sound thin.
 voice_settings:
   neerja:
     gain_db: 0.0
-    eq:
-      # Minimal de-mud only — body/chest must survive for warmth
-      - {type: "pk", freq: 300.0, gain: -0.4, q: 0.8}
-      # Mid presence for consonant definition
-      - {type: "pk", freq: 2800.0, gain: 1.6, q: 0.9}
-      # Crisp articulation band
-      - {type: "pk", freq: 4500.0, gain: 2.0, q: 0.8}
-      # High shelf air — sibilant clarity ("pristine high-resolution")
-      - {type: "pk", freq: 9500.0, gain: 2.8, q: 0.6}
+    eq: []
   swara:
     gain_db: 0.0
-    eq:
-      # Cancel the persona chest-warmth for Hindi only, at its exact centre
-      - {type: "pk", freq: 175.0, gain: -2.0, q: 0.9}
-      # De-thickness: wide cut across the boxy 250-500 Hz low-mid
-      - {type: "pk", freq: 340.0, gain: -3.6, q: 0.7}
-      - {type: "pk", freq: 550.0, gain: -1.6, q: 0.8}
-      # Mid presence for consonant definition
-      - {type: "pk", freq: 2800.0, gain: 1.8, q: 0.9}
-      # Crisp articulation band
-      - {type: "pk", freq: 4500.0, gain: 2.2, q: 0.8}
-      # Air and sparkle — the 'sweet' quality
-      - {type: "pk", freq: 9500.0, gain: 4.0, q: 0.6}
+    eq: []
   aria:
     gain_db: 0.0
-    eq:
-      - {type: "pk", freq: 300.0, gain: -0.4, q: 0.8}
-      - {type: "pk", freq: 2800.0, gain: 1.6, q: 0.9}
-      - {type: "pk", freq: 4500.0, gain: 2.0, q: 0.8}
-      - {type: "pk", freq: 9500.0, gain: 2.8, q: 0.6}
+    eq: []
 
 # Per-segment variation (conversation drift, not metronome)
 variation:

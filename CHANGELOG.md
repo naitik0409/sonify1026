@@ -27,6 +27,14 @@ All notable changes to this project are documented here.
 - **Fix:** an emotion passed as an `Emotion` enum is now normalised correctly
   (previously could fall back to the neutral preset).
 
+### Fixed
+- **Voice body/warmth restored.** The per-voice EQ shipped for the voices made
+  them sound thin — worst on the default `swara`, whose curve (literally
+  labelled "de-thickness") cut 175–550 Hz and boosted 2.8 k–9.5 kHz. All
+  per-voice EQ is now neutral, so delivery keeps the backend's natural chest
+  warmth; the persona stage still adds gentle presence. Spectral centroid drops
+  from ~4.1 kHz back to ~3.0 kHz — matching the raw backend tone.
+
 ### Reproducibility
 - New optional **`backend_cache`** reuses the exact raw backend audio for
   identical takes, so a fixed `seed` is byte-reproducible (Edge TTS on its own

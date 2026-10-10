@@ -146,18 +146,29 @@ class TestPhoneticClarity:
         """Our chain must not dull the neural voice it receives."""
         import asyncio
         import edge_tts
-        from snfy.engine import _decode_mp3
+        from snfy.engine import _decode_mp3, _is_hindi
 
-        async def raw():
-            com = edge_tts.Communicate(EN, "en-IN-NeerjaNeural",
-                                       rate="+0%", volume="+0%", pitch="+0Hz")
+        def pick_voice(text: str) -> str:
+            cfg = engine.config
+            vm = cfg.get("voice_mode", {})
+            if vm.get("mode") == "single":
+                vkey = vm.get("primary", "swara")
+                return VOICES[vkey]["id"]
+            else:
+                return VOICES["neerja" if not _is_hindi(text) else "swara"]["id"]
+
+        async def raw(voice_id: str, rate: str = "+0%", pitch: str = "+0Hz"):
+            com = edge_tts.Communicate(EN, voice_id, rate=rate, volume="+0%", pitch=pitch)
             buf = bytearray()
             async for ch in com.stream():
                 if ch["type"] == "audio":
                     buf += ch["data"]
             return bytes(buf)
 
-        xr, fsr = _decode_mp3(asyncio.run(raw()))
+        vkey = pick_voice(EN)
+        rate = engine.config.get("emotions", {}).get("neutral", {}).get("rate", "+0%")
+        pitch = engine.config.get("emotions", {}).get("neutral", {}).get("pitch", 0)
+        xr, fsr = _decode_mp3(asyncio.run(raw(vkey, rate=rate, pitch=f"{pitch:+d}Hz")))
         c_raw = clarity(xr.astype(np.float64), fsr)
         m = render(engine, EN, "muffle_en")
         assert m["clarity"] >= c_raw["clarity"] - 1.0, \
