@@ -64,11 +64,14 @@ engine.synthesize(
 | `output_path` | `str \| None` | `None` | Destination `.wav`. Missing directories are created. If `None`, a temp file is written to `outputs/temp_synthesis.wav` **and** the audio is returned |
 | `accent` | `str` | `"in"` | `"in"` (Indian English) or `"us"` |
 | `register` | `str` | `"normal"` | `normal`, `formal`, or `casual` |
-| `seed` | `int \| None` | `None` | `None` = a new random delivery every call. Pass an integer to pin the performance decisions |
+| `seed` | `int \| None` | `None` | `None` = a new random delivery every call. Pass an integer to pin the performance decisions (see `backend_cache` for byte-identical output) |
 
 **Behaviour notes**
 
 - Every call produces a *different* performance unless `seed` is given.
+- For **byte-identical** output, also enable `backend_cache` (below) so the
+  upstream neural audio is reused; otherwise the Edge TTS service may vary the
+  waveform a hair between calls.
 - Raises if the backend returns no audio (e.g. empty or punctuation-only text).
 - Returns the audio in memory whether or not `output_path` is supplied.
 
@@ -155,7 +158,7 @@ Synthesises and plays immediately. Requires `sounddevice`
 | `engine.set_speed(speed)` | `0.5 – 2.0` | Speaking rate for subsequent calls |
 | `engine.set_pitch(hz)` | `-20 – +25` | Pitch offset in Hz |
 | `engine.set_volume(v)` | `0.0 – 1.5` | Linear volume scale |
-| `engine.set_offline_mode(enabled=True)` | bool | pyttsx3 fallback when offline |
+| `engine.set_offline_mode(enabled=True)` | bool | Swap to the `pyttsx3` backend — a different, lower-quality OS voice (not the Sonify/Edge voice) |
 | `engine.reload_config(config_path=None)` | `str \| None` | Re-read the YAML; optional new path |
 
 Values persist on the instance until changed. `reload_config()` with no

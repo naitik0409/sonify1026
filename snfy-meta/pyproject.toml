@@ -37,7 +37,7 @@ classifiers = [
     "Natural Language :: Hindi",
 ]
 dependencies = [
-    "sonify1026>=0.2.0",
+    "sonify1026~=0.2.0",
 ]
 
 [project.urls]

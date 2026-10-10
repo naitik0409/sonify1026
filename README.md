@@ -9,6 +9,13 @@
 **An expressive, adaptive Indian female TTS voice engine** — warm, mid-register,
 urban Indian English that code-switches seamlessly into native-standard Hindi.
 
+> **What it actually is:** Sonify is a **performance layer over Microsoft
+> Edge TTS**. The neural voice and the raw audio are produced by Edge TTS (free,
+> no API key); Sonify does **not** train or ship a speech model of its own. It
+> directs and post-processes that voice — emotion, prosody, pacing and
+> imperfections — so the free voices *act*. See
+> [Requirements and limits](#requirements-and-limits).
+
 > Made by **Naitik** · [github.com/naitik0409](https://github.com/naitik0409)
 
 [![Sonify 1026 — sample render](assets/demo.gif)](https://sonify1026.streamlit.app)
@@ -28,9 +35,9 @@ engine.synthesize(
 )
 ```
 
-> Installed as **`sonify1026`** (or the alias **`snfy`** — `pip install snfy`
-> installs the same engine), imported as **`snfy`** — the same pattern as
-> `pip install beautifulsoup4` → `import bs4`.
+> The canonical package is **`sonify1026`**; **`snfy`** is a thin alias
+> (`pip install snfy` installs the same engine) and the import name is
+> **`snfy`** — the same pattern as `pip install beautifulsoup4` → `import bs4`.
 
 ---
 
@@ -118,9 +125,11 @@ Most TTS reads. Sonify **performs**:
 | Setup | `pip install` | low-level | `pip install` | needs a driver | SDK + key |
 
 ¹ Amazon Polly / Azure / Google. ² `gTTS` uses Google's endpoint (no key, but
-network + ToS apply). ³ `set_offline_mode()` falls back to `pyttsx3` at lower
-quality. Sonify is a **performance layer on top of** `edge-tts`: it does not
-train its own model, it makes the free voices *act*.
+network + ToS apply). ³ `set_offline_mode()` swaps to the `pyttsx3` backend — a
+**different, OS-provided voice** (not the Sonify/Edge voice), at much lower
+quality; a safety fallback, not the same sound. Sonify is a **performance layer
+on top of** `edge-tts`: it does not train its own model, it makes the free
+voices *act*.
 
 ## Use cases
 
@@ -159,8 +168,8 @@ Full setup — Claude Desktop config, Cursor, examples and the tool reference:
 pip install sonify1026
 ```
 
-Either distribution name works — `snfy` is a thin alias that installs the same
-engine:
+Either distribution name works. **`sonify1026`** is the canonical package;
+**`snfy`** is a thin alias that installs the same engine:
 
 ```bash
 pip install snfy          # identical result to: pip install sonify1026
@@ -196,7 +205,8 @@ Everything public is re-exported from the top-level package:
 ```python
 snfy.SonifyEngine, snfy.Emotion, snfy.Language, snfy.Persona,
 snfy.ProsodyParams, snfy.SynthesisResult, snfy.create_engine,
-snfy.render, snfy.render_arc, snfy.speak, snfy.REGISTERS,
+snfy.render, snfy.render_arc, snfy.speak, snfy.clear_backend_cache,
+snfy.REGISTERS,
 ```
 
 > `import snfy` prints one `INFO` line on first use. That is the library
@@ -268,7 +278,7 @@ engine.synthesize("The order of 250 units ships on 12/05/2026.")       # numbers
 engine.set_speed(1.15)      # 0.5 – 2.0
 engine.set_pitch(0)         # -20 – +25 Hz
 engine.set_volume(1.0)      # 0.0 – 1.5
-engine.set_offline_mode()   # pyttsx3 fallback when the network is down
+engine.set_offline_mode()   # swap to the pyttsx3 backend (different, lower-quality OS voice)
 ```
 
 Controls are per-engine and persist until changed.
@@ -341,15 +351,16 @@ Full reference: **[docs/CONFIGURATION.md](docs/CONFIGURATION.md)**.
 ## Testing
 
 ```bash
-pytest tests -q              # 96 objective checks (needs a network)
+pytest tests -q              # 126 objective checks (needs a network)
 python tests/voice_audit.py  # full voice QA report
 ```
 
 ## Requirements and limits
 
-- **Requires an internet connection** at synthesis time — audio is served by
-  Microsoft Edge TTS. `set_offline_mode()` falls back to pyttsx3, with much
-  lower quality.
+- **Requires an internet connection** at synthesis time — the voice is served
+  by Microsoft Edge TTS. `set_offline_mode()` switches to the `pyttsx3` backend
+  instead: a **different, OS-provided voice** at much lower quality (a fallback,
+  not the same sound).
 - Edge TTS free endpoints are provided as-is; for production, read and comply
   with Microsoft's terms of use.
 - First call takes 1–3 seconds (network round trip).
@@ -366,7 +377,7 @@ python tests/voice_audit.py  # full voice QA report
 | `speak()` / `--play` fails | `pip install sounddevice` |
 | Unwanted `outputs/temp_synthesis.wav` | `synthesize()` always writes a file; pass `output_path=` to control it |
 | Hindi prints as `?` | Console encoding; set `PYTHONIOENCODING=utf-8` |
-| Want the same delivery twice | Pass `seed=12345` (defaults to a fresh random delivery) |
+| Want the same delivery twice | Pass `seed=12345` (defaults to a fresh random delivery); add `backend_cache.enabled: true` for byte-identical output |
 
 More: **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)**.
 

@@ -197,6 +197,7 @@ Per-punctuation prosody, including `terminal_pitch` shaping on the final take
 |---|---|---|
 | `max_utterance_chars` | `260` | Soft target for splitting long text into takes |
 | `soft_max_utterance_chars` | `520` | Hard limit — a take is never cut mid-sentence |
+| `clause_takes` | `{enabled: false, max_utterance_chars: 220}` | **Phase A.** Let a take close on a clause boundary (comma/semicolon/colon), so long multi-clause sentences read as several shorter phrases |
 | `contractions` | `true` | Expand contractions before speaking |
 | `lead_ms` / `tail_ms` | `40` / `110` | Silence padding at the start/end |
 | `crossfade_ms` | `28` | Overlap when joining takes |
@@ -273,6 +274,7 @@ dynamic_prosody:
 | `short_phrase_chars` / `short_phrase_prob_scale` | `45` / `0.4` | Short phrases breathe far less often |
 | `duration_min` / `duration_max` | `0.12` / `0.20` | Breath length in seconds |
 | `level_normal` / `level_emotional` | `0.065` / `0.09` | Breath level — **lower = cleaner speech** |
+| `size_from_pause` | `{enabled: true, ref_pause_ms: 150, min_scale: 0.8, max_scale: 1.4}` | **Phase E.** Size a breath to the pause that follows it — longer gaps get fuller breaths |
 
 ## `keyword_emphasis` and `keyword_breath`
 
@@ -284,6 +286,67 @@ dynamic_prosody:
 | `keyword_breath.enabled` | `true` | Small breath before an emphasised word |
 | `keyword_breath.probability` | `0.10` | How often |
 
+| `keyword_breath.probability` | `0.10` | How often |
+
+## `emphasis`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `true` | Gentle emphasis (no sharp synthetic spikes) |
+| `boost_db` | `1.8` | Emphasis depth |
+| `ramp_factor` | `0.4` | How smoothly the boost fades into the word |
+| `brightness` | `{enabled: true, tilt_db: 1.2, hz: 3800, q: 0.9}` | **Phase C.** An emphasised word is also spectrally brighter, not just louder |
+
+## `de_accent`
+
+**Phase B — given-information de-accenting.** Content words already introduced
+earlier in the script are delivered with slightly less prominence, so genuinely
+new words carry the information. Emphasis always wins: an emphasised or
+content-boosted word is never de-accented.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `true` | Master switch |
+| `given_soften_db` | `-1.5` | Prominence cut on already-given content words |
+| `minor_words` | list | Function words / pronouns skipped by this stage (English + Hindi) |
+
+## `thought_gap`
+
+**Phase E.** A deliberate beat at a thought boundary — as if considering the
+next thought rather than just pausing for punctuation. Pairs with
+`breath.size_from_pause`, which sizes the breath to the gap.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `true` | Master switch |
+| `kinds` | `[sentence, clause]` | Which boundary kinds may take a thought gap |
+| `probability` | `0.22` | How often a boundary gets one |
+| `min_factor` / `max_factor` | `1.3` / `1.9` | Pause-length multiplier range |
+
+## `verbatim`
+
+**Phase G.** Speak the text exactly as written — skip number, currency,
+contraction and dash normalisation. Off by default; also settable per call via
+`synthesize(..., verbatim=True)`.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `false` | When true, every call reads verbatim |
+
+## `backend_cache`
+
+**Reproducibility.** Edge TTS may return slightly different neural audio for
+the same text on each call, so a fixed `seed` reproduces the *engine's*
+performance but not necessarily the exact bytes. When this cache is enabled,
+identical takes reuse the same raw audio within a session, making output
+byte-reproducible for a fixed seed (and saving network calls). In-process only;
+clear it with `snfy.clear_backend_cache()`.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `false` | Cache raw backend audio by (text, voice, rate, volume, pitch) |
+| `max_entries` | `64` | Maximum cached takes before the oldest are evicted |
+
 ## Imperfection controls
 
 All default to `enabled: false` except where noted — turn them on for a more
@@ -294,10 +357,11 @@ human, less polished delivery.
 | `micro_prosody` | `enabled` | **Off.** `amplitude_shimmer_db` (0.35), `rate_hz` (6.0). 6 Hz amplitude shimmer — heard as "shivering" |
 | `vocal_fry` | `enabled`, `probability` (0.38), `intensity` (0.10), `duration_frac`, `max_seconds`, `pulse_hz` | **Off.** Creak at phrase endings — pulses read as "shivering" on Hindi/mixed |
 | `mouth_click` | `enabled`, `probability` (0.10), `duration_ms`, `level_db` (-45) | Lip-parting transient |
-| `pause_filler` | `enabled` | **Spoken hesitations ("uhm"). Off by default** — reads as a stray "ahm" at the end |
+| `pause_filler` | `enabled` | **Spoken hesitations ("uhm"). Off by default** — reads as a stray "ahm" at the end. **Phase D** refines placement: `split_jitter`, `min_spacing_segments`, `boundary_kinds`, `draw_out` |
 | `word_life` | `enabled`, `db` (1.4) | Word-level energy variation |
 | `phrase_swell` | `enabled`, `db` (1.6) | Phrase-level amplitude contour |
 | `room_tone` | `enabled`, `room_ratio`, `breath_ratio` | Room ambience |
+| `whisper_room_tone` | `enabled`, `level_db`, `room_ratio`, `breath_ratio` | **Phase F.** Low room/air bed under a *whisper* delivery only, even when `room_tone` is off |
 | `air_breath` | `lowpass_hz`, `bandwidth`, `intensity_offset` | Breath-noise character |
 | `pitch_contour` | `enabled` | **Off.** Time-domain pitch arc — it smears consonants |
 | `word_elongation` | `enabled` | **Off.** Time-domain stretching — blurs consonants |

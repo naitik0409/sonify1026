@@ -2,6 +2,48 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased]
+
+### Voice — fully-human delivery (phases A–G)
+- **Clause-level takes** (`humanize.clause_takes`): a take can close on a clause
+  boundary, so long multi-clause sentences are read as several shorter phrases
+  with their own intonation. Off by default.
+- **Given-information de-accenting** (`de_accent`): content words already
+  introduced earlier in the script are delivered with slightly less prominence,
+  letting genuinely new words carry the information. Emphasis always wins.
+- **Emphasis brightness** (`emphasis.brightness`): an emphasised word is also
+  spectrally brighter, not just louder.
+- **Natural hesitation fillers** (`pause_filler`): refined placement — jittered
+  (non-centred) position in the pause, minimum spacing to avoid stutter,
+  anchored to real thought (sentence) boundaries, and optional drawn-out
+  variants ("ummm"). Still off by default.
+- **Thought gaps** (`thought_gap`) add a deliberate beat at a thought boundary,
+  and `breath.size_from_pause` sizes the breath to the gap that follows.
+- **Room-tone whisper** (`whisper_room_tone`): a low room/air bed under a
+  whisper delivery, for the "close to the mic in a quiet room" character.
+- **Verbatim mode**: `synthesize(..., verbatim=True)` or `verbatim.enabled`
+  speaks text exactly as written, skipping number / currency / contraction and
+  dash normalisation.
+- **Fix:** an emotion passed as an `Emotion` enum is now normalised correctly
+  (previously could fall back to the neutral preset).
+
+### Reproducibility
+- New optional **`backend_cache`** reuses the exact raw backend audio for
+  identical takes, so a fixed `seed` is byte-reproducible (Edge TTS on its own
+  is not bit-deterministic — samples match to ~0.99 correlation but not
+  byte-for-byte). Off by default; clear it with `snfy.clear_backend_cache()`.
+
+### Docs & clarity
+- README now states up front that Sonify is a **performance layer over Microsoft
+  Edge TTS** — the voice and audio are produced by Edge TTS and no model is
+  trained or shipped — and that `set_offline_mode()` swaps to `pyttsx3`, a
+  *different*, lower-quality OS voice rather than the same sound. The same
+  clarification is in the package description, module docstrings,
+  `docs/TROUBLESHOOTING.md` and `docs/API.md`.
+- The **`snfy` alias** is documented as an explicit alias of the canonical
+  `sonify1026`, and its dependency pin is a compatible range (`~=X.Y.0`) so it
+  cannot drift into an incompatible release.
+
 ## [0.2.0] — 2026-10-10
 
 ### Integrations

@@ -113,6 +113,12 @@ humanize:
   contractions: true
   max_utterance_chars: 260    # sentences stay intact (phoneme clarity); long text still splits
   soft_max_utterance_chars: 520   # only split at real sentence ends — never mid-thought
+  # Phase A — clause-level takes: allow a take to close on a clause boundary
+  # (comma / semicolon / colon), so long multi-clause sentences are read as
+  # several shorter phrases with their own intonation.
+  clause_takes:
+    enabled: false
+    max_utterance_chars: 220
   lead_ms: 40
   tail_ms: 110
   crossfade_ms: 28
@@ -152,12 +158,26 @@ breath:
   duration_max: 0.20
   level_normal: 0.085         # soft inhalation — clearly audible, never a gasp
   level_emotional: 0.10
+  # Phase E — thought-gap breathing: a longer planned pause gets a fuller
+  # breath, so the breath is sized to the gap that follows it.
+  size_from_pause:
+    enabled: true
+    ref_pause_ms: 150.0
+    min_scale: 0.8
+    max_scale: 1.4
 
 # Emphasis settings (gentle — no sharp synthetic spikes)
 emphasis:
   enabled: true
   boost_db: 1.8
   ramp_factor: 0.4
+  # Phase C — emphasis brightness: an emphasised word is also spectrally
+  # brighter, not just louder, so the accent reads as expressive.
+  brightness:
+    enabled: true
+    tilt_db: 1.2             # high-shelf lift on emphasised words
+    hz: 3800.0
+    q: 0.9
 
 # Inline emotion tags: [cheerful], [softly], ... switch the emotion for the
 # text that follows them, and are stripped before synthesis (never spoken).
@@ -245,6 +265,15 @@ pause_filler:
   rate: "-6%"
   volume: "-12%"
   pitch_hz: -3
+  # Phase D — naturalness refinements (only matter when enabled is true):
+  split_jitter: 0.15          # don't always sit dead-centre in the pause
+  min_spacing_segments: 2     # never two hesitations back-to-back (avoids stutter)
+  boundary_kinds: ["sentence"]  # only at real thought boundaries, not clause cuts
+  draw_out:                   # occasionally draw a hesitation out ("ummm")
+    enabled: true
+    probability: 0.4
+    rate: "-14%"
+    max_seconds: 0.9
   micro:                      # tiny stall sounds in shorter pauses
     probability: 0.35
     words: ["uh", "eh", "umm"]
@@ -501,3 +530,103 @@ pitch_contour:
     serious:    {rise: 0.5, fall: 1.3, peak: 0.40}
     angry:      {rise: 1.3, fall: 0.6, peak: 0.25}
     whisper:    {rise: 0.3, fall: 0.7, peak: 0.45}
+
+# ─────────────────────────────────────────────────────────────────────────── #
+# Thought gaps (Phase E) — a deliberate beat at a thought boundary, as if
+# considering the next thought rather than just pausing for punctuation.
+# Pairs with breath.size_from_pause, which sizes the breath to the gap.
+# ─────────────────────────────────────────────────────────────────────────── #
+thought_gap:
+  enabled: true
+  kinds: [sentence, clause]
+  probability: 0.22
+  min_factor: 1.3
+  max_factor: 1.9
+
+# ─────────────────────────────────────────────────────────────────────────── #
+# Given-information de-accenting (Phase B) — content words already introduced
+# earlier in the script are 'given'; genuinely new words carry the
+# information.  Given content words are delivered with slightly less
+# prominence.  Emphasis always wins: an emphasised or content-boosted word is
+# never de-accented.
+# ─────────────────────────────────────────────────────────────────────────── #
+de_accent:
+  enabled: true
+  given_soften_db: -1.5       # prominence cut on already-given content words
+  # Function words / pronouns are weak by nature and skipped by this stage.
+  minor_words:
+    - the
+    - a
+    - an
+    - of
+    - to
+    - and
+    - or
+    - but
+    - in
+    - on
+    - at
+    - is
+    - are
+    - was
+    - were
+    - be
+    - it
+    - that
+    - this
+    - these
+    - those
+    - he
+    - she
+    - they
+    - we
+    - you
+    - i
+    - me
+    - my
+    - your
+    - our
+    - ki
+    - ke
+    - ka
+    - hai
+    - hain
+    - tha
+    - thi
+    - toh
+    - bhi
+    - aur
+    - mein
+    - main
+    - ek
+
+# ─────────────────────────────────────────────────────────────────────────── #
+# Room-tone whisper (Phase F) — a low bed of room tone / air under a whisper
+# delivery, the "close to the mic in a quiet room" character.  Room tone is
+# otherwise off (see room_tone.enabled); this enables it for whisper only.
+# ─────────────────────────────────────────────────────────────────────────── #
+whisper_room_tone:
+  enabled: true
+  level_db: -52
+  room_ratio: 0.7
+  breath_ratio: 0.3
+
+# ─────────────────────────────────────────────────────────────────────────── #
+# Verbatim mode (Phase G) — speak the text exactly as written: skip number,
+# currency, contraction and dash normalisation.  Off by default; also settable
+# per call via synthesize(..., verbatim=True).
+# ─────────────────────────────────────────────────────────────────────────── #
+verbatim:
+  enabled: false
+
+# ─────────────────────────────────────────────────────────────────────────── #
+# Reproducibility — raw backend-audio cache.  Edge TTS may return slightly
+# different neural audio for the same text on each call, so a fixed `seed`
+# alone reproduces the *engine's* performance but not necessarily the exact
+# bytes.  When enabled, identical takes reuse the same raw audio within a
+# session, making output byte-reproducible for a fixed seed (and saving
+# network calls).  Clear it with snfy.engine.clear_backend_cache().
+# ─────────────────────────────────────────────────────────────────────────── #
+backend_cache:
+  enabled: false
+  max_entries: 64

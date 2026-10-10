@@ -39,8 +39,10 @@ if not text.strip():
 Synthesis is a network call. Check connectivity, proxy settings, and retry.
 For a degraded offline fallback:
 ```python
-engine.set_offline_mode(True)   # pyttsx3 — much lower quality
+engine.set_offline_mode(True)   # swaps to the pyttsx3 backend
 ```
+This is a **different, OS-provided voice**, not the Sonify/Edge voice — much
+lower quality, a safety net rather than the same sound.
 
 **`ImportError: No module named 'sounddevice'`**
 Only needed for `engine.speak()` and `snfy "text" --play`:
@@ -149,7 +151,20 @@ engine.synthesize(text, seed=12345)
 engine.synthesize(text, seed=12345)
 ```
 Prosody decisions then match. Waveform samples may still differ slightly,
-because the upstream speech service is not bit-deterministic.
+because the upstream speech service (Edge TTS) is not bit-deterministic.
+
+**Need byte-identical output?**
+Enable the raw-audio cache, which reuses the exact neural audio for identical
+takes, so a fixed `seed` becomes fully reproducible (and network calls are saved):
+```yaml
+backend_cache:
+  enabled: true
+```
+```python
+import snfy.engine
+snfy.engine.clear_backend_cache()   # start fresh if needed
+```
+The cache is in-process only and off by default.
 
 ---
 

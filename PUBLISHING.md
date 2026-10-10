@@ -212,8 +212,9 @@ So the flow becomes: bump the version(s) → commit → create a GitHub Release 
 the new tag → the workflow builds, `twine check`s and uploads to PyPI.
 
 The alias package has its **own** version and dependency pin, so bump
-`snfy-meta/pyproject.toml` (`version`, and `sonify1026>=…`) too when you want
-the alias to pull a newer engine.
+`snfy-meta/pyproject.toml` (`version`, and the compatible pin
+`sonify1026~=X.Y.0`) too when you want the alias to pull a newer engine. The
+`~=` pin keeps the alias from silently pulling an incompatible future release.
 
 ### Authentication
 

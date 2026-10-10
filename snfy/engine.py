@@ -1,7 +1,10 @@
 """
 Sonify 1026 Voice Engine
-A human-like TTS system with emotion, accent, and prosody control.
-Uses edge-tts as primary backend with pyttsx3 fallback.
+A human-like TTS performance layer over Microsoft Edge TTS: the neural voice
+and audio come from Edge TTS; Sonify does not ship its own speech model, it
+directs and post-processes that voice for emotion, accent and prosody.
+Uses edge-tts as the primary backend with pyttsx3 as an offline fallback
+(a different, lower-quality OS voice, not the same sound).
 Includes advanced DSP: FFT EQ, breath sounds, room air, glue compression.
 """
 
@@ -429,18 +432,21 @@ def _apply_contractions(text: str) -> str:
     return text
 
 
-def _preprocess(text, contractions=True):
+def _preprocess(text, contractions=True, verbatim=False):
     t = text.replace("\r\n", "\n")
-    t = t.replace("₹", " rupees ")
-    t = re.sub(r"\bRs\.?\s*", " rupees ", t, flags=re.IGNORECASE)
-    t = convert_numbers_to_english(t)
+    if not verbatim:
+        t = t.replace("₹", " rupees ")
+        t = re.sub(r"\bRs\.?\s*", " rupees ", t, flags=re.IGNORECASE)
+        t = convert_numbers_to_english(t)
     t = re.sub(r"\n+", " ", t)
-    t = re.sub(r"\s+(?:—|–|--)\s+", ", ", t)
-    t = t.replace("...", ",")
+    if not verbatim:
+        t = re.sub(r"\s+(?:—|–|--)\s+", ", ", t)
+        t = t.replace("...", ",")
     t = re.sub(r"[ \t]{2,}", " ", t).strip()
-    if contractions and not _is_hindi(t):
+    if contractions and not verbatim and not _is_hindi(t):
         t = _apply_contractions(t)
-    t = SALUTATION_RE.sub(r'\1, \2', t)
+    if not verbatim:
+        t = SALUTATION_RE.sub(r'\1, \2', t)
     if t and t[-1] not in '.!?…;:,।':
         t += '.'
     return t
@@ -503,6 +509,17 @@ def _pack_utterances(text, max_chars=MAX_UTTERANCE_CHARS, config=None):
     soft_max = float(cfg.get("soft_max_utterance_chars", max_chars * 1.6))
     soft_max = max(float(max_chars), soft_max)
 
+    # Phase A — clause-level takes.  When enabled, a take may also close on a
+    # clause boundary (comma / semicolon / colon) instead of only a sentence
+    # end, so long multi-clause sentences are read as several shorter phrases
+    # with their own intonation rather than one flat run.  Every piece from
+    # `_split_kinds` already ends on punctuation, so the longest take that
+    # fits the cap always closes on a real boundary.
+    ct = cfg.get("clause_takes", {}) or {}
+    clause_takes = bool(ct.get("enabled", False))
+    if clause_takes:
+        soft_max = max(float(max_chars), float(ct.get("max_utterance_chars", soft_max)))
+
     pieces = _split_kinds(text)
     if not pieces:
         return []
@@ -527,14 +544,20 @@ def _pack_utterances(text, max_chars=MAX_UTTERANCE_CHARS, config=None):
         ends = raw.rstrip().endswith((".", "!", "?", "…", "।"))
         extra = len(raw) + (1 if buf else 0)
         if buf and buf_len + extra > soft_max:
-            # Find the last complete sentence to close the take at.
-            cut = len(buf)
-            for i in range(len(buf) - 1, -1, -1):
-                if buf[i][1]:
-                    cut = i + 1
-                    break
-            if cut == 0:
-                cut = 1          # single oversized fragment: take it as-is
+            if clause_takes:
+                # Close the take on the last (clause or sentence) boundary —
+                # every buffered piece ends on punctuation, so this is always
+                # a valid prosodic break.
+                cut = len(buf)
+            else:
+                # Find the last complete sentence to close the take at.
+                cut = len(buf)
+                for i in range(len(buf) - 1, -1, -1):
+                    if buf[i][1]:
+                        cut = i + 1
+                        break
+                if cut == 0:
+                    cut = 1          # single oversized fragment: take it as-is
             flush(cut)
         buf.append((raw, ends))
         buf_len += len(raw) + (1 if len(buf) > 1 else 0)
@@ -564,11 +587,20 @@ def _gap_ms(kind, em, rng, config=None):
     if rng.random() < float(cog.get("probability", 0.0)):
         gap *= rng.uniform(float(cog.get("min_factor", 1.6)),
                            float(cog.get("max_factor", 2.3)))
+    # Thought gap — a deliberate beat at a thought boundary, as if considering
+    # the next thought rather than just pausing for punctuation.
+    tg = (config or {}).get("thought_gap", {}) or {}
+    if tg.get("enabled", False):
+        kinds = tg.get("kinds", ["sentence", "clause"])
+        if (kind in kinds
+                and rng.random() < float(tg.get("probability", 0.0))):
+            gap *= rng.uniform(float(tg.get("min_factor", 1.3)),
+                               float(tg.get("max_factor", 1.9)))
     return gap
 
 
 def _segment(text, emotion, persona, accent_rate, rng, register="normal",
-             variation=None, config=None):
+             variation=None, config=None, verbatim=False):
     """
     Segment text into prosody-labelled chunks.  ALL adjustment rules
     (sentence-type, aside, dynamic intensity) are read from config —
@@ -577,6 +609,7 @@ def _segment(text, emotion, persona, accent_rate, rng, register="normal",
     Inline emotion tags like [cheerful] or [softly] switch the emotion for
     the text that follows them (see `emotion_tags` in config).
     """
+    emotion = emotion.value if isinstance(emotion, Emotion) else emotion
     reg = REGISTERS.get(register, REGISTERS["normal"])
     var = variation or {}
     cfg = config or {}
@@ -591,7 +624,7 @@ def _segment(text, emotion, persona, accent_rate, rng, register="normal",
     speed_rate = int(round((speed - 1.0) * 100.0))
     vol_db = 0 if vol_scale >= 0.999 else int(round(20.0 * np.log10(max(vol_scale, 1e-3))))
 
-    norm     = _preprocess(text, contractions=use_contractions)
+    norm     = _preprocess(text, contractions=use_contractions, verbatim=verbatim)
     tag_map  = cfg.get("emotion_tags", {})
     segments = []
     for span_emo, span_ovr, span_text in _split_emotion_tags(norm, tag_map):
@@ -683,6 +716,13 @@ def _shift_pct(rate_str, delta):
 # edge-tts segment synthesis                                                   #
 # --------------------------------------------------------------------------- #
 
+# In-process cache of raw backend audio, keyed by the exact synthesis
+# parameters.  Off by default (see the `backend_cache` config section): when
+# enabled, repeated identical takes reuse the same neural audio, which makes
+# output reproducible for a fixed seed and avoids redundant network calls.
+_EDGE_AUDIO_CACHE: Dict[tuple, tuple] = {}
+
+
 async def _edge_one(seg, voice):
     import edge_tts
     com = edge_tts.Communicate(
@@ -700,21 +740,39 @@ async def _edge_one(seg, voice):
     return bytes(audio), words
 
 
-async def _edge_all(segments, default_voice):
+async def _edge_all(segments, default_voice, cache_cfg=None):
+    cache_cfg = cache_cfg or {}
+    use_cache = bool(cache_cfg.get("enabled", False))
+    max_entries = int(cache_cfg.get("max_entries", 64) or 64)
     out = []
     for i, seg in enumerate(segments):
         if i:
             await asyncio.sleep(0.08)
         vkey = seg.get("vkey") or default_voice
         voice = VOICES.get(vkey, VOICES["neerja"])["id"]
+        key = (seg["text"], voice, seg.get("rate"), seg.get("volume"),
+               f"{seg.get('pitch', 0):+d}Hz")
+        if use_cache and key in _EDGE_AUDIO_CACHE:
+            out.append(_EDGE_AUDIO_CACHE[key])
+            continue
         try:
-            out.append(await _edge_one(seg, voice))
+            result = await _edge_one(seg, voice)
         except Exception as e:
             # The backend returns no audio for degenerate input (e.g. a bare
             # ellipsis).  Skip that take instead of failing the whole render.
             logger.warning("edge-tts produced no audio for a segment: %s", e)
-            out.append((b"", []))
+            result = (b"", [])
+        if use_cache:
+            _EDGE_AUDIO_CACHE[key] = result
+            while len(_EDGE_AUDIO_CACHE) > max_entries:
+                _EDGE_AUDIO_CACHE.pop(next(iter(_EDGE_AUDIO_CACHE)))
+        out.append(result)
     return out
+
+
+def clear_backend_cache():
+    """Drop the in-process raw-audio cache (see config `backend_cache`)."""
+    _EDGE_AUDIO_CACHE.clear()
 
 
 def _decode_mp3(data):
@@ -962,6 +1020,89 @@ def _keyword_emphasis(x: np.ndarray, fs: int, words, rng,
     if low_words and soften_db < 0.0:
         x = apply(low_words, soften_db)
     return x
+
+
+def _emphasis_tilt(x: np.ndarray, fs: int, word_times, emph_words,
+                   cfg: Optional[Dict] = None) -> np.ndarray:
+    """
+    Emphasis brightness (Phase C): a gentle high-shelf lift applied only on
+    emphasised words, so an accent is heard as brighter *and* louder rather
+    than just a level bump.  The shelf is computed over the whole take with
+    the phase-preserving biquad EQ, then blended in under a smooth per-word
+    envelope — no per-sample filtering, no seams.  Config: 'emphasis.brightness'.
+    """
+    cfg = cfg or {}
+    if not cfg.get("enabled", False) or not emph_words or not word_times:
+        return x
+    tilt_db = float(cfg.get("tilt_db", 0.0))
+    if abs(tilt_db) < 1e-3:
+        return x
+    hz = float(cfg.get("hz", 3800.0))
+    q = float(cfg.get("q", 0.9))
+    ramp_factor = float(cfg.get("ramp_factor", 0.35))
+
+    def norm(s):
+        return re.sub(r"[^\w'’]", "", s.lower())
+
+    want = [norm(w) for w in emph_words]
+    ranges = []
+    wi = 0
+    for (t0, dur, txt) in word_times:
+        if wi < len(want) and norm(txt) == want[wi]:
+            ranges.append((t0, t0 + dur))
+            wi += 1
+    if not ranges:
+        return x
+
+    bright = _eq(x.astype(np.float64), fs, [("pk", hz, tilt_db, q)])
+    env = np.zeros(len(x))
+    for (t0, t1) in ranges:
+        a, b = max(0, int(t0 * fs)), min(len(x), int(t1 * fs))
+        if b <= a + 4:
+            continue
+        ramp = max(1, int((b - a) * ramp_factor))
+        shape = np.ones(b - a)
+        shape[:ramp] = 0.5 - 0.5 * np.cos(np.pi * np.linspace(0, 1, ramp))
+        shape[-ramp:] = 0.5 - 0.5 * np.cos(np.pi * np.linspace(1, 0, ramp))
+        env[a:b] = np.maximum(env[a:b], shape)
+    if not env.any():
+        return x
+    return (x + env * (bright - x)).astype(x.dtype)
+
+
+def _de_accent(x: np.ndarray, fs: int, word_times, rng, given_words,
+               cfg: Optional[Dict] = None) -> np.ndarray:
+    """
+    Given-information de-accenting (Phase B): words already introduced earlier
+    in the script ('given' information) are delivered with slightly less
+    prominence than genuinely new information.  A gentle, ramped level cut on
+    those words only.  Emphasis always wins: callers exclude emphasised /
+    content-boosted words from `given_words`.
+    Config: 'de_accent'.
+    """
+    cfg = cfg or {}
+    if not cfg.get("enabled", False) or not given_words or not word_times:
+        return x
+    soften_db = float(cfg.get("given_soften_db", -1.5))
+    if soften_db >= 0.0:
+        return x
+    keys = {str(w).lower() for w in given_words}
+    env = np.ones(len(x))
+    hit = False
+    for (t0, dur, txt) in word_times:
+        if str(txt).lower().strip(".,!?;:") not in keys:
+            continue
+        a, b = max(0, int(t0 * fs)), min(len(x), int((t0 + dur) * fs))
+        if b <= a + 4:
+            continue
+        g = 10.0 ** (soften_db * rng.uniform(0.6, 1.0) / 20.0)
+        ramp = max(1, int((b - a) * 0.35))
+        shape = np.ones(b - a)
+        shape[:ramp] = 0.5 - 0.5 * np.cos(np.pi * np.linspace(0, 1, ramp))
+        shape[-ramp:] = 0.5 - 0.5 * np.cos(np.pi * np.linspace(1, 0, ramp))
+        env[a:b] *= 1.0 + (g - 1.0) * shape
+        hit = True
+    return x * env if hit else x
 
 
 def _breath_before_keyword(x: np.ndarray, fs: int, words, rng,
@@ -1559,7 +1700,8 @@ def _bp(fs, fc, bw, q=None):
     return b, a
 
 
-def master(track, fs, em, persona: Persona, rng, config: Optional[Dict] = None):
+def master(track, fs, em, persona: Persona, rng, config: Optional[Dict] = None,
+           emotion_key: Optional[str] = None):
     cfg = config or {}
     room_cfg = cfg.get("room_tone", {})
     air_cfg = cfg.get("air_breath", {})
@@ -1568,17 +1710,38 @@ def master(track, fs, em, persona: Persona, rng, config: Optional[Dict] = None):
     env = _smooth_env(x, fs)
     thr = np.percentile(env, 55)
 
-    if room_cfg.get("enabled", False):
-        gate = np.clip((thr * 1.1 - env) / max(thr, 1e-9), 0.0, 1.0)
+    # Phase F — room-tone whisper.  Room tone is otherwise off; for a whisper
+    # delivery a low bed of room tone / air is exactly what sells the
+    # "close to the mic in a quiet room" character, so it can be enabled for
+    # whisper alone via 'whisper_room_tone'.
+    wrt_cfg = cfg.get("whisper_room_tone", {}) or {}
+    is_whisper = emotion_key == "whisper"
+    room_on = room_cfg.get("enabled", False)
+    whisper_room_on = is_whisper and wrt_cfg.get("enabled", False)
+
+    if room_on or whisper_room_on:
+        if thr < 1e-4:
+            # No measurable noise floor (e.g. a synthesised track with hard
+            # silence): nothing to gate against, so let the bed sit under the
+            # whole take rather than collapsing to zero.
+            gate = np.ones_like(env)
+        else:
+            gate = np.clip((thr * 1.1 - env) / thr, 0.0, 1.0)
         gw = np.hanning(max(3, int(fs * 0.05)))
         gw /= gw.sum()
         gate = np.convolve(gate, gw, mode="same")
         duration = len(x) / fs
-        room = _room_tone(fs, duration, rng, intensity_db=em["air"], config=room_cfg)
+        if whisper_room_on and not room_on:
+            rc = {**room_cfg, **{k: v for k, v in wrt_cfg.items() if k != "enabled"}}
+            level = float(wrt_cfg.get("level_db", em["air"]))
+        else:
+            rc = room_cfg
+            level = em["air"]
+        room = _room_tone(fs, duration, rng, intensity_db=level, config=rc)
         air_offset = air_cfg.get("intensity_offset", -4)
-        air_breath = _air_breath(fs, duration, rng, intensity_db=em["air"] + air_offset, config=air_cfg)
-        room_ratio = room_cfg.get("room_ratio", 0.7)
-        breath_ratio = room_cfg.get("breath_ratio", 0.3)
+        air_breath = _air_breath(fs, duration, rng, intensity_db=level + air_offset, config=air_cfg)
+        room_ratio = rc.get("room_ratio", 0.7)
+        breath_ratio = rc.get("breath_ratio", 0.3)
         min_len = min(len(room), len(air_breath), len(x))
         combined_air = room[:min_len] * room_ratio + air_breath[:min_len] * breath_ratio
         x[:min_len] += combined_air * gate[:min_len]
@@ -1635,15 +1798,114 @@ def _apply_terminal(segments, cfg):
         last["pitch"] = int(np.clip(last["pitch"] + t_delta, v["lo"], v["hi"]))
 
 
+def _insert_fillers(segments, filler_cfg, rng):
+    """Phase D — place spoken hesitations ("uhm") inside natural pauses.
+
+    Pure (no audio, no network), so placement can be tested deterministically.
+    Returns a new segment list with filler segments spliced into the pauses
+    that qualify.  Refinements over a naive insertion:
+      * 'split_jitter'      keeps a hesitation from always sitting dead-centre;
+      * 'min_spacing_segments' avoids two hesitations back-to-back;
+      * 'boundary_kinds'    anchors hesitations to real thought boundaries;
+      * 'draw_out'          occasionally draws one out ("ummm").
+    """
+    tiers = []
+    base_words = list(filler_cfg.get("words", []) or [])
+    if base_words and float(filler_cfg.get("probability", 0.0)) > 0.0:
+        tiers.append(dict(
+            words=base_words,
+            prob=float(filler_cfg.get("probability", 0.0)),
+            min_pause=float(filler_cfg.get("min_pause_ms", 175)),
+            gain=float(filler_cfg.get("gain_db", -10.0)),
+            rate=str(filler_cfg.get("rate", "-6%")),
+            volume=str(filler_cfg.get("volume", "-12%")),
+            pitch=int(filler_cfg.get("pitch_hz", -3)),
+            max_s=float(filler_cfg.get("max_seconds", 0.6)),
+            split=0.5))
+    micro = filler_cfg.get("micro", {}) or {}
+    if list(micro.get("words", []) or []) and float(micro.get("probability", 0.0)) > 0.0:
+        tiers.append(dict(
+            words=list(micro["words"]),
+            prob=float(micro["probability"]),
+            min_pause=float(micro.get("min_pause_ms", 90)),
+            gain=float(micro.get("gain_db", -13.0)),
+            rate=str(micro.get("rate", "+0%")),
+            volume=str(micro.get("volume", "-15%")),
+            pitch=int(micro.get("pitch_hz", -4)),
+            max_s=float(micro.get("max_seconds", 0.45)),
+            split=0.4))
+    if not tiers:
+        return segments
+
+    placed = []
+    last_index = len(segments) - 1
+    spacing = int(filler_cfg.get("min_spacing_segments", 0) or 0)
+    jitter = float(filler_cfg.get("split_jitter", 0.0) or 0.0)
+    _bk = filler_cfg.get("boundary_kinds")
+    allowed_kinds = {str(k) for k in _bk} if _bk else None
+    draw = filler_cfg.get("draw_out", {}) or {}
+    since_filler = spacing  # the first eligible pause may fire
+    for si, s in enumerate(segments):
+        chosen = None
+        # Never place a hesitation AFTER the final segment: there is no
+        # following phrase, so it just dangles at the end.
+        if (si != last_index and since_filler >= spacing
+                and (allowed_kinds is None
+                     or s.get("kind") in allowed_kinds)):
+            for tier in tiers:
+                if (s["pause_ms"] >= tier["min_pause"]
+                        and rng.random() < tier["prob"]):
+                    chosen = tier
+                    break
+        if chosen is None:
+            since_filler += 1
+            placed.append(s)
+            continue
+        # A hesitation does not always sit dead-centre in the pause; a little
+        # jitter keeps it from feeling mechanical.
+        split = float(chosen["split"])
+        if jitter > 0.0:
+            split = float(np.clip(split + rng.uniform(-jitter, jitter), 0.2, 0.8))
+        half = s["pause_ms"] * split
+        s["pause_ms"] = half
+        fseg = dict(s)
+        fseg["text"] = str(rng.choice(chosen["words"]))
+        fseg["kind"] = "filler"
+        fseg["is_filler"] = True
+        fseg["emph"] = []
+        fseg["key_words"] = []
+        fseg["effort"] = 0.0
+        fseg["valence"] = 0.0
+        fseg["breath_scale"] = 1.0
+        fseg["pitch"] = s["pitch"] + chosen["pitch"]
+        fseg["rate"] = chosen["rate"]
+        fseg["volume"] = chosen["volume"]
+        fseg["pause_ms"] = half
+        fseg["filler_gain_db"] = chosen["gain"]
+        fseg["filler_max_s"] = chosen["max_s"]
+        # Drawn-out variant ("ummm"): a slower, longer hesitation.
+        if (draw.get("enabled", False)
+                and rng.random() < float(draw.get("probability", 0.0))):
+            fseg["rate"] = str(draw.get("rate", chosen["rate"]))
+            fseg["filler_max_s"] = float(draw.get("max_seconds", chosen["max_s"]))
+        placed.append(s)
+        placed.append(fseg)
+        since_filler = 0
+    return placed
+
+
 def render(text, out_wav, emotion=DEFAULT_EMOTION, persona: Persona = None,
-           accent=DEFAULT_ACCENT, seed=20261009, breaths=True, config=None, register=DEFAULT_REGISTER):
+           accent=DEFAULT_ACCENT, seed=20261009, breaths=True, config=None, register=DEFAULT_REGISTER,
+           verbatim=False):
     return render_arc([(text, emotion)], out_wav, persona=persona,
-                      accent=accent, seed=seed, breaths=breaths, config=config, register=register)
+                      accent=accent, seed=seed, breaths=breaths, config=config, register=register,
+                      verbatim=verbatim)
 
 
 def render_arc(steps, out_wav, persona: Persona = None,
                accent=DEFAULT_ACCENT, seed=20261009, breaths=True,
-               config: Optional[Dict] = None, register: str = DEFAULT_REGISTER):
+               config: Optional[Dict] = None, register: str = DEFAULT_REGISTER,
+               verbatim: bool = False):
     persona = persona or Persona()
     rng = np.random.default_rng(seed)
     acc = ACCENTS.get(accent, ACCENTS[DEFAULT_ACCENT])
@@ -1659,82 +1921,25 @@ def render_arc(steps, out_wav, persona: Persona = None,
 
     segments = []
     for text, emo in steps:
-        segs = _segment(text, emo, persona, acc["rate"], rng,
-                        register=register, variation=variation_cfg, config=cfg)
+        emo_key = emo.value if isinstance(emo, Emotion) else emo
+        segs = _segment(text, emo_key, persona, acc["rate"], rng,
+                        register=register, variation=variation_cfg, config=cfg,
+                        verbatim=verbatim)
         for s in segs:
             s["vkey"] = _pick_voice(s["text"], accent)
         if segments and segs:
             reg_pause = REGISTERS.get(register, REGISTERS["normal"])["pause"]
             segments[-1]["pause_ms"] = max(
                 segments[-1]["pause_ms"],
-                SENTENCE_PAUSE_MS * EMOTIONS.get(emo, EMOTIONS["neutral"])["pause"]
+                SENTENCE_PAUSE_MS * EMOTIONS.get(emo_key, EMOTIONS["neutral"])["pause"]
                 * reg_pause * 0.9 * rng.uniform(0.9, 1.1))
         segments.extend(segs)
 
     # ---- Cognitive hesitation fillers (uhm / hmm) inside natural pauses ----
     filler_cfg = cfg.get("pause_filler", {})
     if filler_cfg.get("enabled", False):
-        tiers = []
-        base_words = list(filler_cfg.get("words", []) or [])
-        if base_words and float(filler_cfg.get("probability", 0.0)) > 0.0:
-            tiers.append(dict(
-                words=base_words,
-                prob=float(filler_cfg.get("probability", 0.0)),
-                min_pause=float(filler_cfg.get("min_pause_ms", 175)),
-                gain=float(filler_cfg.get("gain_db", -10.0)),
-                rate=str(filler_cfg.get("rate", "-6%")),
-                volume=str(filler_cfg.get("volume", "-12%")),
-                pitch=int(filler_cfg.get("pitch_hz", -3)),
-                max_s=float(filler_cfg.get("max_seconds", 0.6)),
-                split=0.5))
-        micro = filler_cfg.get("micro", {}) or {}
-        if list(micro.get("words", []) or []) and float(micro.get("probability", 0.0)) > 0.0:
-            tiers.append(dict(
-                words=list(micro["words"]),
-                prob=float(micro["probability"]),
-                min_pause=float(micro.get("min_pause_ms", 90)),
-                gain=float(micro.get("gain_db", -13.0)),
-                rate=str(micro.get("rate", "+0%")),
-                volume=str(micro.get("volume", "-15%")),
-                pitch=int(micro.get("pitch_hz", -4)),
-                max_s=float(micro.get("max_seconds", 0.45)),
-                split=0.4))
-        if tiers:
-            placed = []
-            last_index = len(segments) - 1
-            for si, s in enumerate(segments):
-                chosen = None
-                # Never place a hesitation AFTER the final segment: there is
-                # no following phrase, so it just dangles at the end.
-                if si != last_index:
-                    for tier in tiers:
-                        if (s["pause_ms"] >= tier["min_pause"]
-                                and rng.random() < tier["prob"]):
-                            chosen = tier
-                            break
-                if chosen is None:
-                    placed.append(s)
-                    continue
-                half = s["pause_ms"] * chosen["split"]
-                s["pause_ms"] = half
-                fseg = dict(s)
-                fseg["text"] = str(rng.choice(chosen["words"]))
-                fseg["kind"] = "filler"
-                fseg["is_filler"] = True
-                fseg["emph"] = []
-                fseg["key_words"] = []
-                fseg["effort"] = 0.0
-                fseg["valence"] = 0.0
-                fseg["breath_scale"] = 1.0
-                fseg["pitch"] = s["pitch"] + chosen["pitch"]
-                fseg["rate"] = chosen["rate"]
-                fseg["volume"] = chosen["volume"]
-                fseg["pause_ms"] = half
-                fseg["filler_gain_db"] = chosen["gain"]
-                fseg["filler_max_s"] = chosen["max_s"]
-                placed.append(s)
-                placed.append(fseg)
-            segments = placed
+        segments = _insert_fillers(segments, filler_cfg, rng)
+
 
     vm = cfg.get("voice_mode", {})
     single_mode = vm.get("mode") == "single"
@@ -1790,7 +1995,25 @@ def render_arc(steps, out_wav, persona: Persona = None,
             v = VOICES[segments[i]["vkey"]]
             segments[i]["pitch"] = int(np.clip(cur, v["lo"], v["hi"]))
 
-    raw = asyncio.run(_edge_all(segments, acc["voice"]))
+    # ---- Given-information tracking (Phase B) ----------------------------
+    # Content words that appeared in an earlier take are 'given'; genuinely
+    # new words carry the information.  Emphasis always wins, so words that
+    # are explicitly emphasised or content-boosted are never de-accented.
+    da_cfg = cfg.get("de_accent", {})
+    if da_cfg.get("enabled", False):
+        minor = {str(w).lower() for w in (da_cfg.get("minor_words", []) or [])}
+        seen = set()
+        for s in segments:
+            toks = re.findall(r"[\w'\u0900-\u097F]+", s["text"].lower())
+            content = [w for w in toks if w not in minor and len(w) > 1]
+            skip = {w.lower() for w in (list(s.get("emph", [])) +
+                                        list(s.get("key_words", [])))}
+            given = [w for w in content if w in seen and w not in skip]
+            s["given_words"] = list(dict.fromkeys(given))
+            seen.update(content)
+
+    raw = asyncio.run(_edge_all(segments, acc["voice"],
+                                cache_cfg=cfg.get("backend_cache")))
 
     fs0 = None
     pieces = []
@@ -1848,6 +2071,10 @@ def render_arc(steps, out_wav, persona: Persona = None,
             boost_db = emphasis_cfg.get("boost_db", 2.5)
             ramp_factor = emphasis_cfg.get("ramp_factor", 0.35)
             x = _emphasis_env(x, fs, words, seg["emph"], boost_db=boost_db, ramp_factor=ramp_factor)
+            # ---- Emphasis brightness (Phase C): accent = brighter too ----
+            emph_bc = emphasis_cfg.get("brightness", {}) or {}
+            if emph_bc.get("enabled", False):
+                x = _emphasis_tilt(x, fs, words, seg["emph"], emph_bc)
 
         # ---- Vocal effort: gentle projection on content words -------------
         kw_cfg = cfg.get("keyword_emphasis", {})
@@ -1855,6 +2082,10 @@ def render_arc(steps, out_wav, persona: Persona = None,
                 and (seg.get("key_words") or seg.get("low_words"))):
             x = _keyword_emphasis(x, fs, words, rng, seg["key_words"], kw_cfg,
                                   low_words=seg.get("low_words", []))
+
+        # ---- Given-information de-accenting (Phase B) --------------------
+        if not is_filler and seg.get("given_words"):
+            x = _de_accent(x, fs, words, rng, seg["given_words"], da_cfg)
 
         if word_life_cfg.get("enabled", False):
             x = _word_life(x, fs, words, rng, db=word_life_cfg.get("db", 1.7))
@@ -1913,6 +2144,14 @@ def render_arc(steps, out_wav, persona: Persona = None,
                 p = min(1.0, p + breath_cfg.get("emotional_boost", 0.15))
             size = (0.8 + 0.6 * min(len(seg["text"]) / 70.0, 1.0)) \
                 * float(seg.get("breath_scale", 1.0))
+            # Thought-gap breathing (Phase E): a longer planned pause needs a
+            # fuller breath, so breath size tracks the gap that follows.
+            ep = breath_cfg.get("size_from_pause", {}) or {}
+            if ep.get("enabled", False):
+                ref = float(ep.get("ref_pause_ms", 150.0)) or 150.0
+                size *= float(np.clip(seg.get("pause_ms", ref) / ref,
+                                      float(ep.get("min_scale", 0.8)),
+                                      float(ep.get("max_scale", 1.4))))
             if rng.random() < p:
                 ref_rms = float(np.sqrt((x ** 2).mean()) + 1e-12)
                 br = _breath(fs, rng, ref_rms, seg["emo"], config=breath_cfg, size=size)
@@ -1977,8 +2216,10 @@ def render_arc(steps, out_wav, persona: Persona = None,
     # configured micro-pause range (they bypass pause_ms entirely).
     track = _compress_gaps(track.astype(np.float64), fs, cfg)
 
-    master_emotion = EMOTIONS.get(steps[0][1], EMOTIONS["neutral"])
-    y, fs_out = master(track, fs, master_emotion, persona, rng, config=cfg)
+    master_key = steps[0][1].value if isinstance(steps[0][1], Emotion) else steps[0][1]
+    master_emotion = EMOTIONS.get(master_key, EMOTIONS["neutral"])
+    y, fs_out = master(track, fs, master_emotion, persona, rng, config=cfg,
+                       emotion_key=master_key)
 
     out_wav = os.path.abspath(out_wav)
     os.makedirs(os.path.dirname(out_wav), exist_ok=True)
@@ -2155,6 +2396,7 @@ class SonifyEngine:
         accent: str = "in",
         register: str = "normal",
         seed: Optional[int] = None,
+        verbatim: Optional[bool] = None,
     ) -> SynthesisResult:
         if language is None:
             language = Language.HI_IN if _is_hindi(text) else Language.EN_IN
@@ -2164,6 +2406,11 @@ class SonifyEngine:
             accent_key = "us"
         else:
             accent_key = accent or "in"
+
+        # Phase G — verbatim: read the text exactly as written (skip number /
+        # currency / contraction normalisation).  Defaults to the config flag.
+        if verbatim is None:
+            verbatim = bool((self.config.get("verbatim", {}) or {}).get("enabled", False))
 
         if output_path is None:
             output_path = os.path.join("outputs", "temp_synthesis.wav")
@@ -2205,7 +2452,7 @@ class SonifyEngine:
                 attempt_cfg["_pitch"] = self._pitch + adjust
                 render(text, output_path, emotion=emotion_key, persona=self.persona,
                        accent=accent_key, seed=seed, config=attempt_cfg,
-                       register=register)
+                       register=register, verbatim=verbatim)
                 audio, sr = sf.read(output_path, dtype="float32", always_2d=False)
                 if audio.ndim > 1:
                     audio = audio.mean(axis=1)
