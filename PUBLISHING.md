@@ -193,7 +193,7 @@ python -m twine check dist/*
 python -m twine upload dist/*
 ```
 
-Use semantic versioning: `0.1.0` → `0.1.1` (fixes), `0.2.0` (new features),
+Use semantic versioning: `0.1.0` → `0.1.1` (fixes), `0.3.0` (new features),
 `1.0.0` (stable API).
 
 ---
@@ -263,7 +263,7 @@ The repo already lives at `github.com/naitik0409/sonify1026`:
 ```bash
 git init
 git add .
-git commit -m "Sonify 1026 v0.2.0"
+git commit -m "Sonify 1026 v0.3.0"
 git branch -M main
 git remote add origin https://github.com/naitik0409/sonify1026.git
 git push -u origin main
@@ -278,6 +278,6 @@ pip install git+https://github.com/naitik0409/sonify1026.git
 Add a release tag so versions are traceable:
 
 ```bash
-git tag v0.2.0
+git tag v0.3.0
 git push --tags
 ```
