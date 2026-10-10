@@ -198,6 +198,48 @@ Use semantic versioning: `0.1.0` → `0.1.1` (fixes), `0.2.0` (new features),
 
 ---
 
+## 9. Automated releases (GitHub Actions)
+
+Two workflows publish on **Release published** (or manually via
+`Run workflow`):
+
+| Workflow | Publishes |
+|---|---|
+| `.github/workflows/publish-sonify1026.yml` | `sonify1026` (repo root) |
+| `.github/workflows/publish-snfy.yml` | `snfy` alias (`snfy-meta/`) |
+
+So the flow becomes: bump the version(s) → commit → create a GitHub Release for
+the new tag → the workflow builds, `twine check`s and uploads to PyPI.
+
+The alias package has its **own** version and dependency pin, so bump
+`snfy-meta/pyproject.toml` (`version`, and `sonify1026>=…`) too when you want
+the alias to pull a newer engine.
+
+### Authentication
+
+The workflows support either method:
+
+1. **API token (already configured).** A repository secret named
+   `PYPI_API_TOKEN` holds a PyPI API token; the workflow passes it to
+   `pypa/gh-action-pypi-publish`. Rotate it in **Settings → Secrets and
+   variables → Actions**.
+2. **Trusted Publishing (recommended, no secret).** On PyPI, for each project
+   open **Manage → Publishing → Add a new pending publisher** with:
+
+   | Field | Value |
+   |---|---|
+   | PyPI project name | `sonify1026` (and separately `snfy`) |
+   | Owner | `naitik0409` |
+   | Repository name | `sonify1026` |
+   | Workflow name | `publish-sonify1026.yml` (and `publish-snfy.yml`) |
+   | Environment name | `pypi` |
+
+   Once added you can delete the `PYPI_API_TOKEN` secret; the `id-token: write`
+   permission in the workflow makes the action use OIDC automatically when no
+   password is supplied.
+
+---
+
 ## Troubleshooting
 
 | Problem | Fix |
