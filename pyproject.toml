@@ -60,6 +60,9 @@ dev = [
     "twine>=4.0.0",
     "sounddevice>=0.4.6",
 ]
+mcp = [
+    "mcp>=1.0.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/naitik0409/sonify1026"
@@ -69,6 +72,7 @@ Issues = "https://github.com/naitik0409/sonify1026/issues"
 [project.scripts]
 sonify1026 = "snfy.__main__:main"
 snfy = "snfy.__main__:main"
+snfy-mcp = "snfy.mcp_server:main"
 
 [tool.setuptools.packages.find]
 include = ["snfy*"]

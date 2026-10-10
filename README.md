@@ -40,6 +40,7 @@ engine.synthesize(
 - [Why Sonify](#why-sonify)
 - [How it compares](#how-it-compares)
 - [Use cases](#use-cases)
+- [Integrations](#integrations)
 - [Installation](#installation)
 - [Importing](#importing)
 - [Quickstart](#quickstart)
@@ -131,6 +132,26 @@ train its own model, it makes the free voices *act*.
 - **Accessibility & screen reading** — clearer, warmer delivery.
 - **E-learning & edtech** — one speaker for English and Hindi lessons.
 - **Notifications & alerts** — warm or serious, chosen per message.
+
+## Integrations
+
+Give your agents and apps a voice:
+
+- **MCP server** — any MCP client (Claude Desktop, Cursor, Windsurf) gets
+  `synthesize` and `emotions` tools. Install with `pip install "sonify1026[mcp]"`
+  then run `snfy-mcp`.
+- **LangChain** and **LlamaIndex** — drop-in tool wrappers.
+- **Generic function calling** — an OpenAI-style schema is included.
+
+```python
+from snfy.mcp_server import synthesize_to_file
+
+info = synthesize_to_file("Yaar, kal ki meeting bahut important hai.", emotion="warm")
+print(info["path"])   # -> the rendered WAV file
+```
+
+Full setup — Claude Desktop config, Cursor, examples and the tool reference:
+**[docs/INTEGRATIONS.md](docs/INTEGRATIONS.md)**.
 
 ## Installation
 
@@ -355,6 +376,7 @@ More: **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)**.
 |---|---|
 | [docs/API.md](docs/API.md) | Complete API reference |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Every config key, with tuning guidance |
+| [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) | MCP server, LangChain & LlamaIndex tools |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Problems and fixes |
 | [CHANGELOG.md](CHANGELOG.md) | Release history |
 

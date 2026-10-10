@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased]
+
+### Integrations
+- **MCP server.** `snfy/mcp_server.py` exposes the voice as Model Context
+  Protocol tools (`synthesize`, `emotions`) for Claude Desktop, Cursor and any
+  MCP client. Install the extra (`pip install "sonify1026[mcp]"`) and run
+  `snfy-mcp`. Works with MCP SDK 2.x and 1.x.
+- **LangChain & LlamaIndex** tool examples in `examples/`.
+- New `docs/INTEGRATIONS.md`; README gains an **Integrations** section.
+
 ## [0.1.2] — 2026-10-10
 
 ### Packaging

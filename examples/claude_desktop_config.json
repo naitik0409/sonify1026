@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "sonify1026": {
+      "command": "python",
+      "args": ["-m", "snfy.mcp_server"]
+    }
+  }
+}
