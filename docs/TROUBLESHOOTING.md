@@ -3,16 +3,17 @@
 ## Installation & import
 
 **`ModuleNotFoundError: No module named 'snfy'`**
-The package installs as `sonify1026` but imports as `snfy`:
+The package installs as `sonify1026` (or the alias `snfy`) but imports as `snfy`:
 ```python
 import snfy          # correct
 import sonify1026    # wrong - that is the pip name, not the module
 ```
+Install with either name: `pip install sonify1026` or `pip install snfy`.
 
 **Wrong version installed, or an old one is picked up**
 ```bash
-pip uninstall -y sonify1026
-pip install --upgrade sonify1026
+pip uninstall -y sonify1026 snfy
+pip install --upgrade sonify1026     # or: pip install --upgrade snfy
 python -c "import snfy; print(snfy.__file__, snfy.__version__)"
 ```
 If you also have the project checked out locally, running from that folder

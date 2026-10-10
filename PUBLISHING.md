@@ -1,6 +1,7 @@
 # Publishing `sonify1026` to PyPI — full guide
 
 Distribution name: **`sonify1026`** (what people `pip install`)
+Alias distribution: **`snfy`** (thin meta-package that installs `sonify1026`)
 Import name: **`snfy`** (what people write in code)
 
 ---

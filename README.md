@@ -83,6 +83,13 @@ Most TTS reads. Sonify **performs**:
 pip install sonify1026
 ```
 
+Either distribution name works — `snfy` is a thin alias that installs the same
+engine:
+
+```bash
+pip install snfy          # identical result to: pip install sonify1026
+```
+
 Python 3.9+. No API key, no account. Dependencies (`edge-tts`, `numpy`,
 `scipy`, `soundfile`, `PyYAML`) install automatically.
 
