@@ -4,14 +4,14 @@
 [![Python](https://img.shields.io/pypi/pyversions/sonify1026.svg)](https://pypi.org/project/sonify1026/)
 [![Downloads](https://img.shields.io/pypi/dm/sonify1026.svg)](https://pypi.org/project/sonify1026/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Live%20demo-Space-ffbf00)](https://huggingface.co/spaces/naitik0409/sonify1026)
+[![Live demo](https://img.shields.io/badge/Live%20demo-Streamlit-ff4b4b)](https://sonify1026.streamlit.app)
 
 **An expressive, adaptive Indian female TTS voice engine** — warm, mid-register,
 urban Indian English that code-switches seamlessly into native-standard Hindi.
 
 > Made by **Naitik** · [github.com/naitik0409](https://github.com/naitik0409)
 
-[![Sonify 1026 — sample render](assets/demo.gif)](https://huggingface.co/spaces/naitik0409/sonify1026)
+[![Sonify 1026 — sample render](assets/demo.gif)](https://sonify1026.streamlit.app)
 
 ```bash
 pip install sonify1026
@@ -61,7 +61,7 @@ engine.synthesize(
 
 **No install needed — type your own text in the live demo:**
 
-### ▶️ [Sonify 1026 on Hugging Face Spaces](https://huggingface.co/spaces/naitik0409/sonify1026)
+### ▶️ [Try Sonify 1026 live](https://sonify1026.streamlit.app)
 
 A few sample renders from the engine (click to play):
 
@@ -73,6 +73,9 @@ A few sample renders from the engine (click to play):
 | [04 · whisper](assets/samples/04_whisper.mp3) | `whisper` | Come closer, I will tell you a secret. |
 | [05 · Hinglish](assets/samples/05_hinglish.mp3) | `neutral` | Yaar, kal ki meeting bahut important hai. |
 | [06 · Hindi](assets/samples/06_hindi.mp3) | `warm` | ठीक है, जो करो पूरे मन से करो। |
+
+Prefer to run it yourself? `pip install streamlit` then `streamlit run streamlit_app.py`,
+or use the standalone Gradio app in [`hf-space/`](hf-space).
 
 ## Why Sonify
 
