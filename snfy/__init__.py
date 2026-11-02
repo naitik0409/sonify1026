@@ -23,7 +23,7 @@ from .engine import (
     DEFAULT_REGISTER,
 )
 
-__version__ = "0.3.0"
+__version__ = "0.3.2"
 __all__ = [
     "SonifyEngine",
     "BIOS02VoiceEngine",
