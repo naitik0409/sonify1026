@@ -276,3 +276,166 @@ def measure(path):
     m["max_silence"] = max(silence_runs(x, fs)) if silence_runs(x, fs) else 0.0
     m["sample_rate"] = int(fs)
     return m
+
+
+# --------------------------------------------------------------------------- #
+# Emotion-differentiation features                                            #
+#                                                                             #
+# Grounded in the standard acoustic-emotion literature (Eyben et al. 2010,    #
+# Pereira 1998, Devillers 2003): the features that reliably separate emotion  #
+# states are prosodic — F0 mean/range, intensity, articulation rate — with    #
+# spectral balance carrying valence.  All are computed from the waveform only #
+# so the benchmark is objective and reproducible.                             #
+# --------------------------------------------------------------------------- #
+
+def spectral_centroid(x, fs):
+    """Energy-weighted mean frequency (Hz) — spectral 'brightness'."""
+    X = np.abs(np.fft.rfft(x)) ** 2
+    f = np.fft.rfftfreq(len(x), 1.0 / fs)
+    tot = np.sum(X) + 1e-20
+    return float(np.sum(f * X) / tot)
+
+
+def _frame_signal(x, fs, win_s=0.025, hop_s=0.010):
+    win = max(16, int(fs * win_s))
+    hop = max(1, int(fs * hop_s))
+    if len(x) < win:
+        return np.zeros((0, win)), win
+    n = 1 + (len(x) - win) // hop
+    idx = np.arange(win)[None, :] + hop * np.arange(n)[:, None]
+    return np.asarray(x)[idx] * np.hanning(win), win
+
+
+def _hz_to_mel(f):
+    return 2595.0 * np.log10(1.0 + np.asarray(f, dtype=np.float64) / 700.0)
+
+
+def _mel_to_hz(m):
+    return 700.0 * (10.0 ** (np.asarray(m, dtype=np.float64) / 2595.0) - 1.0)
+
+
+def mfcc(x, fs, n_mfcc=13, n_mels=26, fmin=20.0, fmax=None):
+    """Frame-wise MFCCs (n_frames, n_mfcc) — numpy/scipy only, no librosa.
+
+    Power spectrum -> triangular mel filterbank -> log -> DCT-II.  These are
+    the standard 'voice colour' features used in emotion and speaker research;
+    their means over an utterance characterise timbre independent of loudness
+    once c0 (the energy coefficient) is dropped.
+    """
+    fmax = fmax if fmax is not None else fs / 2.0
+    fr, win = _frame_signal(x, fs)
+    if len(fr) == 0:
+        return np.zeros((0, n_mfcc))
+    n_fft = 1 << (int(win) - 1).bit_length()
+    spec = np.abs(np.fft.rfft(fr, n_fft)) ** 2
+
+    mel_pts = _mel_to_hz(np.linspace(_hz_to_mel(fmin), _hz_to_mel(fmax), n_mels + 2))
+    bins = np.floor((n_fft + 1) * mel_pts / fs).astype(int)
+    bins = np.clip(bins, 0, n_fft // 2)
+    fb = np.zeros((n_mels, n_fft // 2 + 1))
+    for i in range(n_mels):
+        a, b, c = bins[i], bins[i + 1], bins[i + 2]
+        if b > a:
+            fb[i, a:b] = (np.arange(a, b) - a) / float(b - a)
+        if c > b:
+            fb[i, b:c] = (c - np.arange(b, c)) / float(c - b)
+    mel_e = np.maximum(spec @ fb.T, 1e-12)
+    log_e = np.log(mel_e)
+    # DCT-II (orthonormal) — the scipy definition, implemented directly so the
+    # test suite keeps its current dependency set.
+    n = n_mels
+    basis = np.cos(np.pi * np.arange(n_mfcc)[:, None] *
+                   (2 * np.arange(n)[None, :] + 1) / (2.0 * n))
+    basis[0] *= np.sqrt(1.0 / n)
+    basis[1:] *= np.sqrt(2.0 / n)
+    return log_e @ basis.T
+
+
+def cepstral_mean(x, fs, n_mfcc=13):
+    """Utterance-level mean MFCC vector — a compact timbre/identity descriptor."""
+    c = mfcc(x, fs, n_mfcc=n_mfcc)
+    if len(c) == 0:
+        return np.zeros(n_mfcc)
+    return c.mean(axis=0)
+
+
+def mcd(c1, c2):
+    """Mel cepstral distortion (dB) between two mean-MFCC vectors.
+
+    Classic voice-conversion speaker-individuality measure:
+        MCD = (10/ln10) * sqrt(2 * sum_m (c1_m - c2_m)^2)
+    c0 is excluded by the caller (it mostly tracks energy, not identity).
+    Identical timbres -> 0; different speakers -> typically 4-8 dB.
+    """
+    a = np.asarray(c1, dtype=np.float64).ravel()
+    b = np.asarray(c2, dtype=np.float64).ravel()
+    n = min(len(a), len(b))
+    d = a[1:n] - b[1:n]          # drop c0 (energy) — identity lives above it
+    return float((10.0 / np.log(10.0)) * np.sqrt(2.0 * np.sum(d ** 2)))
+
+
+def syllable_nuclei(x, fs):
+    """Count syllable nuclei via energy-envelope peak picking.
+
+    The standard cheap articulation-rate proxy (de Jong & Wempe): nuclei are
+    local maxima of the dB envelope above a relative threshold, at least
+    200 ms apart (physiological ceiling on syllable rate).
+    """
+    ed = envelope_db(x, fs, win_ms=10.0)
+    if len(ed) < 8:
+        return 0
+    from scipy.signal import find_peaks
+    base = float(np.median(ed))
+    top = float(np.percentile(ed, 95))
+    thr = base + 0.35 * max(top - base, 1.0)
+    peaks, _ = find_peaks(ed, height=thr, distance=max(1, int(0.20 / 0.01)))
+    return int(len(peaks))
+
+
+def emotion_features(x, fs):
+    """Acoustic feature bundle for emotion-differentiation benchmarking.
+
+    One flat dict of scalars so rows from different renders can be z-scored
+    and compared directly (see tests/emotion_benchmark.py).
+    """
+    p = pitch_stats(x, fs)
+    l = loudness(x, fs)
+    c = clarity(x, fs)
+    dur = len(x) / fs
+    nuclei = syllable_nuclei(x, fs)
+    return {
+        "f0_median": p["f0_median"],
+        "f0_span": p["f0_p95"] - p["f0_p05"],
+        "rms_db": l["rms_db"],
+        "dyn_db": l["loudness_range_db"],
+        "rate_syll": nuclei / dur if dur > 0 else 0.0,
+        "nuclei": float(nuclei),
+        "duration": dur,
+        "clarity": c["clarity"],
+        "centroid_hz": spectral_centroid(x, fs),
+    }
+
+
+# Features that carry arousal/valence information for the separation matrix.
+# `duration` and `nuclei` are reported but excluded: with identical text they
+# are redundant with rate_syll, and duration is dominated by pause policy.
+EMOTION_FEATURE_KEYS = (
+    "f0_median", "f0_span", "rms_db", "dyn_db",
+    "rate_syll", "clarity", "centroid_hz",
+)
+
+# Acoustic correlates of arousal (high -> low): these are the dimensions on
+# which excited/angry should separate from sad/calm/whisper.
+AROUSAL_FEATURE_KEYS = ("f0_median", "f0_span", "rms_db", "rate_syll", "dyn_db")
+
+
+def identity_features(x, fs, n_mfcc=13):
+    """Speaker-identity descriptor: pitch statistics + mean timbre vector."""
+    p = pitch_stats(x, fs)
+    f0 = f0_track(x, fs)
+    v = f0[np.isfinite(f0) & (f0 > 0)]
+    return {
+        "f0_median": p["f0_median"],
+        "f0_iqr": float(np.percentile(v, 75) - np.percentile(v, 25)) if len(v) > 4 else 0.0,
+        "mfcc_mean": cepstral_mean(x, fs, n_mfcc=n_mfcc),
+    }

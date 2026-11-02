@@ -1,4 +1,5 @@
-edge-tts>=6.1.12
+# 7.3.1+ required: Microsoft's Sec-MS-GEC v2 rotation (Oct 2026) 403s older versions.
+edge-tts>=7.3.1
 numpy>=1.26.0
 scipy>=1.11.0
 soundfile>=0.12.1

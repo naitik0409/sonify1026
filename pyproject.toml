@@ -46,7 +46,9 @@ classifiers = [
     "Natural Language :: Hindi",
 ]
 dependencies = [
-    "edge-tts>=6.1.12",
+    # 7.3.1 ships the Sec-MS-GEC v2 handshake Microsoft enforced from ~Oct 2026;
+    # older versions fail every synthesis with HTTP 403 (rany2/edge-tts#490).
+    "edge-tts>=7.3.1",
     "numpy>=1.26.0",
     "scipy>=1.11.0",
     "soundfile>=0.12.1",
@@ -82,3 +84,6 @@ snfy = ["*.yaml", "*.yml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "network: renders audio through Edge TTS (requires internet access)",
+]
