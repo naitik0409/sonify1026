@@ -154,14 +154,16 @@ class TestBenchmarkReportLogic:
 # 3. Live benchmark — network required (Edge TTS)                             #
 # =========================================================================== #
 
+@pytest.fixture(scope="module")
+def report():
+    """One benchmark render for the whole live module (shared by all asserts)."""
+    os.makedirs(OUT, exist_ok=True)
+    return run_benchmark(emotions=LIVE_EMOTIONS, langs=("en", "hi"),
+                         with_identity=True, out_dir=OUT, verbose=False)
+
+
 @pytest.mark.network
 class TestEmotionDifferentiationLive:
-    @pytest.fixture(scope="class")
-    def report(self):
-        os.makedirs(OUT, exist_ok=True)
-        return run_benchmark(emotions=LIVE_EMOTIONS, langs=("en", "hi"),
-                             with_identity=True, out_dir=OUT, verbose=False)
-
     def test_all_cells_rendered(self, report):
         for lang in ("en", "hi"):
             cells = report["cells"].get(lang, {})

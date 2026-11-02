@@ -355,6 +355,16 @@ pytest tests -q              # 126 objective checks (needs a network)
 python tests/voice_audit.py  # full voice QA report
 ```
 
+Emotion differentiation & cross-language speaker identity are measured by an
+objective benchmark (thresholds, not by ear):
+
+```bash
+python tests/emotion_benchmark.py --quick   # ~1 min, writes outputs/benchmark/
+```
+
+See **[docs/BENCHMARKING.md](docs/BENCHMARKING.md)** for the metrics,
+thresholds, and current baseline.
+
 ## Requirements and limits
 
 - **Requires an internet connection** at synthesis time — the voice is served

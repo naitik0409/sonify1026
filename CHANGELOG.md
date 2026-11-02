@@ -4,6 +4,19 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Benchmarking
+- **Emotion & identity benchmark** (`tests/emotion_benchmark.py`): objective
+  acceptance harness for emotion differentiation (Spearman rho of
+  config-implied vs measured arousal, z-space separation from neutral) and
+  cross-language speaker identity (EN↔HI F0 register, voice-routing checks,
+  MCD with two-speaker / same-voice controls). Per-language thresholds, fixed
+  seed, `--quick` / `--reuse` / `--json` modes; asserted by
+  `tests/test_emotion_benchmark.py` (`network` marker) and documented in
+  `docs/BENCHMARKING.md`. Baseline: 21/21 checks pass (EN ρ +0.86, HI ρ +0.79).
+- **Dependency floor:** `edge-tts` bumped to `>=7.3.1` — Microsoft's
+  Sec-MS-GEC v2 rotation (late Oct 2026) 403s 7.2.8; 7.3.1 signs requests
+  correctly.
+
 ### Voice — fully-human delivery (phases A–G)
 - **Clause-level takes** (`humanize.clause_takes`): a take can close on a clause
   boundary, so long multi-clause sentences are read as several shorter phrases
