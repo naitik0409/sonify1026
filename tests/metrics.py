@@ -411,22 +411,32 @@ def emotion_features(x, fs):
         "rate_syll": nuclei / dur if dur > 0 else 0.0,
         "nuclei": float(nuclei),
         "duration": dur,
+        # pace = 1/duration.  With identical text per language this is the
+        # robust articulation-rate cue: the syllable-nuclei detector is noisy
+        # on Hindi retroflexes, while duration cleanly tracks both the emotion
+        # rate offset and the configured pause multiplier.
+        "pace": 1.0 / dur if dur > 0 else 0.0,
         "clarity": c["clarity"],
         "centroid_hz": spectral_centroid(x, fs),
     }
 
 
-# Features that carry arousal/valence information for the separation matrix.
-# `duration` and `nuclei` are reported but excluded: with identical text they
-# are redundant with rate_syll, and duration is dominated by pause policy.
+# Features that carry emotion information for the separation matrix.
+# Excluded on purpose:
+#   rms_db   — the mastering stage normalises every render to target_rms_db,
+#              so absolute level cannot differ between cells by design;
+#   rate_syll — noisy syllable counting; `pace` (1/duration) is the reliable
+#              rate cue when the text is held constant.
 EMOTION_FEATURE_KEYS = (
-    "f0_median", "f0_span", "rms_db", "dyn_db",
-    "rate_syll", "clarity", "centroid_hz",
+    "f0_median", "f0_span", "dyn_db", "pace", "clarity", "centroid_hz",
 )
 
-# Acoustic correlates of arousal (high -> low): these are the dimensions on
-# which excited/angry should separate from sad/calm/whisper.
-AROUSAL_FEATURE_KEYS = ("f0_median", "f0_span", "rms_db", "rate_syll", "dyn_db")
+# Acoustic correlates of arousal (high -> low): F0 level and tempo are the
+# two dimensions the emotion presets control that survive normalisation —
+# exactly the classic arousal pair from the emotion literature (Eyben 2010,
+# Pereira 1998).  F0 span / loudness dynamics vary too but are contaminated
+# by phrase-level effects, so they inform separation, not the rank test.
+AROUSAL_FEATURE_KEYS = ("f0_median", "pace")
 
 
 def identity_features(x, fs, n_mfcc=13):
